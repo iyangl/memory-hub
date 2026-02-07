@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "memory-hub": {
+      "command": "python",
+      "args": ["-m", "daemon"]
+    }
+  }
+}
