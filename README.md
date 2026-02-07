@@ -1,0 +1,1 @@
+Read docs/context/session_handoff_2026-02-07.md, docs/architecture/memory_hub_v1.md, and docs/backlog/mvp_5_weeks.md first. Then start implementation from Milestone 1 and keep all writes append-only for raw_events.
