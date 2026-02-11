@@ -1,26 +1,35 @@
 from __future__ import annotations
 
+from time import perf_counter
 from typing import Any, Dict, List, Sequence
 from uuid import uuid4
 
+from .catalog import catalog_brief_for_pull
+from .errors import BusinessError
 from .policy import build_context_brief, normalize_role, resolve_task_type, roles_for_task
 from .store import (
     MemoryStore,
     bump_memory_version,
     detect_conflicts,
+    enqueue_catalog_job,
     fetch_current_value,
+    fetch_latest_consistency,
     fetch_latest_handoff,
     fetch_open_loops_top,
     fetch_role_payloads,
+    get_catalog_meta,
     get_memory_version,
+    insert_consistency_link,
     insert_handoff_packet,
     insert_open_loops,
     insert_sync_audit,
-    make_context_stamp,
+    make_consistency_stamp,
     parse_context_stamp,
+    resolve_project_workspace,
     upsert_role_delta,
     close_open_loops,
 )
+from .validation import validate_push_payload
 
 DEFAULT_MAX_TOKENS = 1200
 DEFAULT_HANDOFF_TTL_HOURS = 72
@@ -29,7 +38,11 @@ DEFAULT_HANDOFF_TTL_HOURS = 72
 def _required(arguments: Dict[str, Any], keys: Sequence[str]) -> None:
     missing = [k for k in keys if not arguments.get(k)]
     if missing:
-        raise ValueError(f"missing required fields: {', '.join(missing)}")
+        raise BusinessError(
+            error_code="MISSING_REQUIRED_FIELDS",
+            message=f"missing required fields: {', '.join(missing)}",
+            details={"missing": missing},
+        )
 
 
 def _slug(text: str) -> str:
@@ -43,9 +56,17 @@ def _normalize_role_deltas(arguments: Dict[str, Any]) -> List[Dict[str, Any]]:
     decisions_delta = arguments.get("decisions_delta") or []
 
     if not isinstance(role_deltas, list):
-        raise ValueError("role_deltas must be a list")
+        raise BusinessError(
+            error_code="INVALID_PUSH_PAYLOAD",
+            message="role_deltas must be a list",
+            details={"field": "role_deltas"},
+        )
     if not isinstance(decisions_delta, list):
-        raise ValueError("decisions_delta must be a list")
+        raise BusinessError(
+            error_code="INVALID_PUSH_PAYLOAD",
+            message="decisions_delta must be a list",
+            details={"field": "decisions_delta"},
+        )
 
     normalized: List[Dict[str, Any]] = []
 
@@ -91,6 +112,7 @@ def _normalize_role_deltas(arguments: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 def session_sync_pull(store: MemoryStore, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    started = perf_counter()
     _required(arguments, ["project_id", "client_id", "session_id", "task_prompt"])
 
     project_id = str(arguments["project_id"])
@@ -109,13 +131,33 @@ def session_sync_pull(store: MemoryStore, arguments: Dict[str, Any]) -> Dict[str
         open_loops_top = fetch_open_loops_top(conn, project_id, limit=3)
         handoff_latest = fetch_latest_handoff(conn, project_id)
         current_version = get_memory_version(conn)
-        context_stamp = make_context_stamp(current_version)
 
-        context_brief = build_context_brief(
+        memory_context_brief = build_context_brief(
             role_payloads=role_payloads,
             open_loops_top=open_loops_top,
             handoff_latest=handoff_latest,
             max_tokens=max_tokens,
+        )
+
+        catalog_payload = catalog_brief_for_pull(
+            store,
+            project_id=project_id,
+            task_prompt=task_prompt,
+            task_type=resolved_task_type,
+            token_budget=max(300, max_tokens // 2),
+        )
+
+        catalog_brief = str(catalog_payload.get("catalog_brief", ""))
+        context_brief = memory_context_brief
+        if catalog_brief:
+            context_brief = f"{memory_context_brief}\n\n{catalog_brief}".strip()
+
+        catalog_version = str(catalog_payload.get("catalog_version", "sha256:unknown"))
+        consistency_status = str(catalog_payload.get("consistency_status", "unknown"))
+        consistency_stamp = make_consistency_stamp(
+            memory_version=current_version,
+            catalog_version=catalog_version,
+            consistency_status=consistency_status,
         )
 
         sources = []
@@ -136,15 +178,23 @@ def session_sync_pull(store: MemoryStore, arguments: Dict[str, Any]) -> Dict[str
 
         response = {
             "context_brief": context_brief,
+            "memory_context_brief": memory_context_brief,
+            "catalog_brief": catalog_brief,
+            "evidence": catalog_payload.get("evidence", []),
             "role_payloads": role_payloads,
             "open_loops_top": open_loops_top,
             "handoff_latest": handoff_latest or {},
-            "context_stamp": context_stamp,
+            "consistency_stamp": consistency_stamp,
             "trace": {
                 "policy": "task_adaptive",
                 "requested_task_type": requested_task_type or "auto",
                 "resolved_task_type": resolved_task_type,
                 "sources": sources,
+                "catalog": {
+                    "freshness": catalog_payload.get("freshness", "unknown"),
+                    "cache_hit": bool(catalog_payload.get("cache_hit", False)),
+                    "refresh_requested": bool(catalog_payload.get("refresh_requested", False)),
+                },
             },
         }
 
@@ -158,6 +208,7 @@ def session_sync_pull(store: MemoryStore, arguments: Dict[str, Any]) -> Dict[str
             session_id=session_id,
             request_payload=arguments,
             response_payload=response,
+            latency_ms=max(int((perf_counter() - started) * 1000), 0),
         )
         conn.commit()
 
@@ -170,40 +221,43 @@ def session_sync_pull(store: MemoryStore, arguments: Dict[str, Any]) -> Dict[str
 
 
 def session_sync_push(store: MemoryStore, arguments: Dict[str, Any]) -> Dict[str, Any]:
-    _required(arguments, ["project_id", "client_id", "session_id", "session_summary"])
+    started = perf_counter()
+    normalized_args = validate_push_payload(arguments)
+    _required(normalized_args, ["project_id", "client_id", "session_id", "session_summary"])
 
-    project_id = str(arguments["project_id"])
-    client_id = str(arguments["client_id"])
-    session_id = str(arguments["session_id"])
+    project_id = str(normalized_args["project_id"])
+    client_id = str(normalized_args["client_id"])
+    session_id = str(normalized_args["session_id"])
 
-    context_stamp = arguments.get("context_stamp")
-    base_version = parse_context_stamp(context_stamp) if context_stamp else None
+    base_version = parse_context_stamp(normalized_args.get("context_stamp"))
 
-    role_deltas = _normalize_role_deltas(arguments)
-    open_loops_new = arguments.get("open_loops_new") or []
-    open_loops_closed = arguments.get("open_loops_closed") or []
-    files_touched = arguments.get("files_touched") or []
-    session_summary = str(arguments.get("session_summary", "")).strip()
-
-    if not isinstance(open_loops_new, list):
-        raise ValueError("open_loops_new must be a list")
-    if not isinstance(open_loops_closed, list):
-        raise ValueError("open_loops_closed must be a list")
-    if not isinstance(files_touched, list):
-        raise ValueError("files_touched must be a list")
+    role_deltas = _normalize_role_deltas(normalized_args)
+    open_loops_new = normalized_args.get("open_loops_new") or []
+    open_loops_closed = normalized_args.get("open_loops_closed") or []
+    files_touched = normalized_args.get("files_touched") or []
+    session_summary = str(normalized_args.get("session_summary", "")).strip()
 
     conn = store.connect(project_id)
     try:
+        # Enforce per-project workspace binding before any write transaction.
+        resolve_project_workspace(conn, store.project_workspace(project_id))
         conn.execute("BEGIN")
 
         current_version = get_memory_version(conn)
+        latest_consistency = fetch_latest_consistency(conn, project_id)
         conflicts = detect_conflicts(conn, project_id, base_version, role_deltas)
         sync_id = f"sync_{uuid4().hex}"
 
         if conflicts:
+            consistency_stamp = make_consistency_stamp(
+                memory_version=current_version,
+                catalog_version=str(latest_consistency["catalog_version"]),
+                consistency_status=str(latest_consistency["consistency_status"]),
+            )
             response = {
                 "sync_id": sync_id,
                 "memory_version": current_version,
+                "consistency_stamp": consistency_stamp,
                 "conflicts": conflicts,
                 "status": "needs_resolution",
             }
@@ -214,8 +268,10 @@ def session_sync_push(store: MemoryStore, arguments: Dict[str, Any]) -> Dict[str
                 direction="push",
                 client_id=client_id,
                 session_id=session_id,
-                request_payload=arguments,
+                request_payload=normalized_args,
                 response_payload=response,
+                error_code="CONFLICT_DETECTED",
+                latency_ms=max(int((perf_counter() - started) * 1000), 0),
             )
             conn.commit()
             return response
@@ -255,7 +311,7 @@ def session_sync_push(store: MemoryStore, arguments: Dict[str, Any]) -> Dict[str
         handoff_summary = {
             "session_summary": session_summary,
             "role_delta_count": len(applied_role_deltas),
-            "decision_delta_count": len(arguments.get("decisions_delta") or []),
+            "decision_delta_count": len(normalized_args.get("decisions_delta") or []),
             "files_touched": files_touched,
             "open_loops_new": inserted_loops,
             "open_loops_closed": closed_loop_ids,
@@ -271,9 +327,39 @@ def session_sync_push(store: MemoryStore, arguments: Dict[str, Any]) -> Dict[str
             ttl_hours=DEFAULT_HANDOFF_TTL_HOURS,
         )
 
+        job_id = enqueue_catalog_job(
+            conn,
+            project_id=project_id,
+            job_type="incremental_refresh",
+            payload={
+                "files_touched": files_touched,
+                "memory_version": new_version,
+                "sync_id": sync_id,
+                "session_id": session_id,
+            },
+        )
+
+        catalog_meta = get_catalog_meta(conn, project_id)
+        catalog_version = "sha256:unknown" if catalog_meta is None else str(catalog_meta["catalog_version"])
+        insert_consistency_link(
+            conn,
+            project_id=project_id,
+            sync_id=sync_id,
+            memory_version=new_version,
+            catalog_version=catalog_version,
+            consistency_status="degraded",
+        )
+
+        consistency_stamp = make_consistency_stamp(
+            memory_version=new_version,
+            catalog_version=catalog_version,
+            consistency_status="degraded",
+        )
+
         response = {
             "sync_id": sync_id,
             "memory_version": new_version,
+            "consistency_stamp": consistency_stamp,
             "conflicts": [],
             "status": "ok",
             "applied": {
@@ -281,6 +367,10 @@ def session_sync_push(store: MemoryStore, arguments: Dict[str, Any]) -> Dict[str
                 "open_loops_new": inserted_loops,
                 "open_loops_closed": closed_loop_ids,
                 "handoff": handoff,
+            },
+            "catalog_job": {
+                "job_id": job_id,
+                "status": "pending",
             },
         }
 
@@ -291,8 +381,9 @@ def session_sync_push(store: MemoryStore, arguments: Dict[str, Any]) -> Dict[str
             direction="push",
             client_id=client_id,
             session_id=session_id,
-            request_payload=arguments,
+            request_payload=normalized_args,
             response_payload=response,
+            latency_ms=max(int((perf_counter() - started) * 1000), 0),
         )
         conn.commit()
         return response
@@ -304,11 +395,16 @@ def session_sync_push(store: MemoryStore, arguments: Dict[str, Any]) -> Dict[str
 
 
 def session_sync_resolve_conflict(store: MemoryStore, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    started = perf_counter()
     _required(arguments, ["project_id", "client_id", "session_id", "strategy", "role_deltas"])
 
     strategy = str(arguments.get("strategy", "")).strip().lower()
     if strategy not in {"accept_theirs", "keep_mine", "merge_note"}:
-        raise ValueError("strategy must be one of: accept_theirs, keep_mine, merge_note")
+        raise BusinessError(
+            error_code="INVALID_CONFLICT_STRATEGY",
+            message="strategy must be one of: accept_theirs, keep_mine, merge_note",
+            details={"strategy": strategy},
+        )
 
     project_id = str(arguments["project_id"])
     client_id = str(arguments["client_id"])
@@ -318,12 +414,17 @@ def session_sync_resolve_conflict(store: MemoryStore, arguments: Dict[str, Any])
         conn = store.connect(project_id)
         try:
             sync_id = f"sync_{uuid4().hex}"
-            current_version = get_memory_version(conn)
+            latest = fetch_latest_consistency(conn, project_id)
             response = {
                 "sync_id": sync_id,
                 "status": "ok",
                 "strategy": strategy,
-                "memory_version": current_version,
+                "memory_version": int(latest["memory_version"]),
+                "consistency_stamp": make_consistency_stamp(
+                    memory_version=int(latest["memory_version"]),
+                    catalog_version=str(latest["catalog_version"]),
+                    consistency_status=str(latest["consistency_status"]),
+                ),
                 "applied": "no_write",
             }
             insert_sync_audit(
@@ -335,6 +436,7 @@ def session_sync_resolve_conflict(store: MemoryStore, arguments: Dict[str, Any])
                 session_id=session_id,
                 request_payload=arguments,
                 response_payload=response,
+                latency_ms=max(int((perf_counter() - started) * 1000), 0),
             )
             conn.commit()
             return response
@@ -351,13 +453,17 @@ def session_sync_resolve_conflict(store: MemoryStore, arguments: Dict[str, Any])
             "status": push_response["status"],
             "strategy": strategy,
             "memory_version": push_response["memory_version"],
+            "consistency_stamp": push_response.get("consistency_stamp"),
             "conflicts": push_response.get("conflicts", []),
         }
 
-    # merge_note
     role_deltas = arguments.get("role_deltas") or []
     if not isinstance(role_deltas, list):
-        raise ValueError("role_deltas must be a list")
+        raise BusinessError(
+            error_code="INVALID_PUSH_PAYLOAD",
+            message="role_deltas must be a list",
+            details={"field": "role_deltas"},
+        )
 
     conn = store.connect(project_id)
     try:
@@ -401,5 +507,6 @@ def session_sync_resolve_conflict(store: MemoryStore, arguments: Dict[str, Any])
         "status": push_response["status"],
         "strategy": strategy,
         "memory_version": push_response["memory_version"],
+        "consistency_stamp": push_response.get("consistency_stamp"),
         "conflicts": push_response.get("conflicts", []),
     }

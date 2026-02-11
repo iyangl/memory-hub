@@ -14,7 +14,18 @@ class SyncFlowTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
-        self.store = MemoryStore(root_dir=self.root)
+        self.workspace = self.root / "workspace"
+        self.workspace.mkdir(parents=True, exist_ok=True)
+        (self.workspace / "src").mkdir(parents=True, exist_ok=True)
+        (self.workspace / "src" / "main.py").write_text(
+            "import json\nfrom src.helper import run\n",
+            encoding="utf-8",
+        )
+        (self.workspace / "src" / "helper.py").write_text(
+            "def run():\n    return 'ok'\n",
+            encoding="utf-8",
+        )
+        self.store = MemoryStore(root_dir=self.root / "db", workspace_root=self.workspace)
 
     def tearDown(self) -> None:
         self.tmp.cleanup()
@@ -47,11 +58,12 @@ class SyncFlowTests(unittest.TestCase):
                     {"title": "Define conflict UX", "priority": 1, "owner_role": "architect"}
                 ],
                 "open_loops_closed": [],
-                "files_touched": ["memory_hub/sync.py"],
+                "files_touched": ["src/main.py"],
             },
         )
         self.assertEqual(push["status"], "ok")
         self.assertEqual(push["memory_version"], 1)
+        self.assertEqual(push["consistency_stamp"]["memory_version"], 1)
 
         pull = session_sync_pull(
             self.store,
@@ -65,9 +77,28 @@ class SyncFlowTests(unittest.TestCase):
             },
         )
         self.assertEqual(pull["trace"]["resolved_task_type"], "planning")
-        self.assertEqual(pull["context_stamp"], "v1")
+        self.assertIn("consistency_stamp", pull)
+        self.assertEqual(pull["consistency_stamp"]["memory_version"], 1)
+        self.assertIn("catalog_brief", pull)
         self.assertTrue(any(block["role"] == "pm" for block in pull["role_payloads"]))
         self.assertTrue(pull["open_loops_top"])
+
+        conn = self.store.connect("proj_a")
+        try:
+            rows = conn.execute(
+                """
+                SELECT direction, error_code, latency_ms
+                FROM sync_audit
+                WHERE project_id = 'proj_a'
+                ORDER BY created_at ASC
+                """
+            ).fetchall()
+            self.assertGreaterEqual(len(rows), 2)
+            for row in rows:
+                self.assertIsInstance(row["latency_ms"], int)
+                self.assertGreaterEqual(int(row["latency_ms"]), 0)
+        finally:
+            conn.close()
 
     def test_conflict_and_merge_note_resolution(self) -> None:
         first = session_sync_push(
@@ -88,7 +119,7 @@ class SyncFlowTests(unittest.TestCase):
                 "decisions_delta": [],
                 "open_loops_new": [],
                 "open_loops_closed": [],
-                "files_touched": [],
+                "files_touched": ["src/main.py"],
             },
         )
         self.assertEqual(first["memory_version"], 1)
@@ -99,7 +130,7 @@ class SyncFlowTests(unittest.TestCase):
                 "project_id": "proj_conflict",
                 "client_id": "client_a",
                 "session_id": "s2",
-                "context_stamp": "v1",
+                "context_stamp": first["consistency_stamp"],
                 "session_summary": "a change",
                 "role_deltas": [
                     {
@@ -111,7 +142,7 @@ class SyncFlowTests(unittest.TestCase):
                 "decisions_delta": [],
                 "open_loops_new": [],
                 "open_loops_closed": [],
-                "files_touched": [],
+                "files_touched": ["src/main.py"],
             },
         )
         self.assertEqual(second["status"], "ok")
@@ -123,7 +154,7 @@ class SyncFlowTests(unittest.TestCase):
                 "project_id": "proj_conflict",
                 "client_id": "client_b",
                 "session_id": "s3",
-                "context_stamp": "v1",
+                "context_stamp": first["consistency_stamp"],
                 "session_summary": "stale update",
                 "role_deltas": [
                     {
@@ -135,7 +166,7 @@ class SyncFlowTests(unittest.TestCase):
                 "decisions_delta": [],
                 "open_loops_new": [],
                 "open_loops_closed": [],
-                "files_touched": [],
+                "files_touched": ["src/main.py"],
             },
         )
         self.assertEqual(stale["status"], "needs_resolution")
@@ -159,7 +190,7 @@ class SyncFlowTests(unittest.TestCase):
                 "decisions_delta": [],
                 "open_loops_new": [],
                 "open_loops_closed": [],
-                "files_touched": [],
+                "files_touched": ["src/main.py"],
             },
         )
         self.assertEqual(resolved["status"], "ok")
@@ -178,7 +209,7 @@ class SyncFlowTests(unittest.TestCase):
                 "decisions_delta": [],
                 "open_loops_new": [],
                 "open_loops_closed": [],
-                "files_touched": [],
+                "files_touched": ["src/main.py"],
             },
         )
 
@@ -194,7 +225,7 @@ class SyncFlowTests(unittest.TestCase):
                 "decisions_delta": [],
                 "open_loops_new": [],
                 "open_loops_closed": [],
-                "files_touched": [],
+                "files_touched": ["src/main.py"],
             },
         )
 
