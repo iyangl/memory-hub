@@ -23,6 +23,7 @@ from .store import (
     insert_handoff_packet,
     insert_open_loops,
     insert_sync_audit,
+    list_sync_audit_entries,
     make_consistency_stamp,
     parse_context_stamp,
     resolve_project_workspace,
@@ -33,6 +34,8 @@ from .validation import validate_push_payload
 
 DEFAULT_MAX_TOKENS = 1200
 DEFAULT_HANDOFF_TTL_HOURS = 72
+DEFAULT_AUDIT_LIMIT = 20
+MAX_AUDIT_LIMIT = 200
 
 
 def _required(arguments: Dict[str, Any], keys: Sequence[str]) -> None:
@@ -218,6 +221,62 @@ def session_sync_pull(store: MemoryStore, arguments: Dict[str, Any]) -> Dict[str
         }
     finally:
         conn.close()
+
+
+def session_sync_audit_list(store: MemoryStore, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    _required(arguments, ["project_id"])
+    project_id = str(arguments["project_id"])
+
+    raw_limit = arguments.get("limit", DEFAULT_AUDIT_LIMIT)
+    if raw_limit is None:
+        raw_limit = DEFAULT_AUDIT_LIMIT
+    try:
+        limit = int(raw_limit)
+    except (TypeError, ValueError) as exc:
+        raise BusinessError(
+            error_code="INVALID_AUDIT_QUERY",
+            message="limit must be an integer between 1 and 200",
+            details={"limit": raw_limit},
+            retryable=False,
+        ) from exc
+    if limit < 1 or limit > MAX_AUDIT_LIMIT:
+        raise BusinessError(
+            error_code="INVALID_AUDIT_QUERY",
+            message="limit must be between 1 and 200",
+            details={"limit": limit},
+            retryable=False,
+        )
+
+    raw_direction = arguments.get("direction")
+    direction: str | None = None
+    if raw_direction is not None:
+        if not isinstance(raw_direction, str):
+            raise BusinessError(
+                error_code="INVALID_AUDIT_QUERY",
+                message="direction must be a string when provided",
+                details={"direction": raw_direction},
+                retryable=False,
+            )
+        direction = raw_direction.strip() or None
+
+    conn = store.connect(project_id)
+    try:
+        items = list_sync_audit_entries(
+            conn,
+            project_id=project_id,
+            limit=limit,
+            direction=direction,
+        )
+    finally:
+        conn.close()
+
+    return {
+        "project_id": project_id,
+        "direction": direction or "all",
+        "limit": limit,
+        "count": len(items),
+        "items": items,
+    }
 
 
 def session_sync_push(store: MemoryStore, arguments: Dict[str, Any]) -> Dict[str, Any]:

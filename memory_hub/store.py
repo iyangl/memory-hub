@@ -760,6 +760,48 @@ def insert_sync_audit(
     )
 
 
+def list_sync_audit_entries(
+    conn: sqlite3.Connection,
+    *,
+    project_id: str,
+    limit: int,
+    direction: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    query = (
+        """
+        SELECT sync_id, project_id, direction, client_id, session_id,
+               request_json, response_json, error_code, latency_ms, created_at
+        FROM sync_audit
+        WHERE project_id = ?
+        """
+    )
+    params: List[Any] = [project_id]
+    if direction:
+        query += " AND direction = ?"
+        params.append(direction)
+    query += " ORDER BY created_at DESC LIMIT ?"
+    params.append(int(limit))
+
+    rows = conn.execute(query, tuple(params)).fetchall()
+    payload: List[Dict[str, Any]] = []
+    for row in rows:
+        payload.append(
+            {
+                "sync_id": row["sync_id"],
+                "project_id": row["project_id"],
+                "direction": row["direction"],
+                "client_id": row["client_id"],
+                "session_id": row["session_id"],
+                "request": json_loads(row["request_json"], {}),
+                "response": json_loads(row["response_json"], {}),
+                "error_code": row["error_code"],
+                "latency_ms": row["latency_ms"],
+                "created_at": row["created_at"],
+            }
+        )
+    return payload
+
+
 def get_catalog_meta(conn: sqlite3.Connection, project_id: str) -> Optional[Dict[str, Any]]:
     row = conn.execute(
         """

@@ -11,12 +11,16 @@ Local-first MCP backend for cross IDE/CLI context sync.
 - `memory-push`
   - syncs structured session deltas
   - enqueues catalog refresh job
+- `memory-sync`
+  - `start <task prompt>`: pull first, then execute task
+  - `finish`: push current session state
 
 ## MCP tools
 
 - `session.sync.pull`
 - `session.sync.push`
 - `session.sync.resolve_conflict`
+- `session.sync.audit.list`
 - `catalog.brief.generate`
 - `catalog.health.check`
 
@@ -27,6 +31,17 @@ Local-first MCP backend for cross IDE/CLI context sync.
 ```bash
 python3 -m memory_hub.server --root ~/.memory-hub --workspace-root /path/to/repo
 ```
+
+## Global skills
+
+Install project skills to `~/.codex/skills`:
+
+```bash
+chmod +x scripts/install_global_skills.sh scripts/uninstall_global_skills.sh
+./scripts/install_global_skills.sh
+```
+
+See `GLOBAL_SKILLS.md` for end-to-end usage.
 
 ## Run tests
 

@@ -8,3 +8,8 @@ __pycache__/
 coverage.xml
 htmlcov/
 .ace-tool/
+
+# Ensure project skills are tracked even if global gitignore ignores `skills/`.
+!skills/
+!skills/**/
+!skills/**/SKILL.md

@@ -12,7 +12,12 @@ from uuid import uuid4
 from .catalog import catalog_brief_generate, catalog_health_check
 from .errors import BusinessError
 from .store import DEFAULT_ROOT, MemoryStore, insert_sync_audit
-from .sync import session_sync_pull, session_sync_push, session_sync_resolve_conflict
+from .sync import (
+    session_sync_audit_list,
+    session_sync_pull,
+    session_sync_push,
+    session_sync_resolve_conflict,
+)
 
 
 @dataclass(frozen=True)
@@ -90,6 +95,19 @@ TOOLS: List[Tool] = [
                 "files_touched": {"type": ["array", "null"]},
             },
             "required": ["project_id", "client_id", "session_id", "strategy", "role_deltas"],
+        },
+    ),
+    Tool(
+        name="session.sync.audit.list",
+        description="List recent sync audit entries for a project.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "project_id": {"type": "string"},
+                "limit": {"type": ["integer", "null"]},
+                "direction": {"type": ["string", "null"]},
+            },
+            "required": ["project_id"],
         },
     ),
     Tool(
@@ -196,6 +214,8 @@ class MCPServer:
             return session_sync_push(self.store, arguments)
         if name == "session.sync.resolve_conflict":
             return session_sync_resolve_conflict(self.store, arguments)
+        if name == "session.sync.audit.list":
+            return session_sync_audit_list(self.store, arguments)
         if name == "catalog.brief.generate":
             return catalog_brief_generate(self.store, arguments)
         if name == "catalog.health.check":
@@ -227,6 +247,8 @@ class MCPServer:
             direction = "push"
         elif tool_name == "session.sync.resolve_conflict":
             direction = "resolve_conflict"
+        elif tool_name == "session.sync.audit.list":
+            direction = "audit_list"
         elif tool_name == "catalog.brief.generate":
             direction = "catalog_brief"
         elif tool_name == "catalog.health.check":
