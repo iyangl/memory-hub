@@ -1,2 +1,0 @@
--- Deprecated.
--- Schema is now managed by migration files in memory_hub/migrations/*.sql.
