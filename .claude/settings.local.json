@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(test:*)",
-      "mcp__ace-tool__search_context"
+      "mcp__ace-tool__search_context",
+      "Bash(python:*)",
+      "Bash(python -m lib.cli write:*)",
+      "Bash(pip install:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
