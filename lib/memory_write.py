@@ -8,16 +8,12 @@ Content is read from stdin.
 from __future__ import annotations
 
 import argparse
-import os
-import re
 import sys
-import tempfile
 from pathlib import Path
 
 from lib import envelope, paths
 
 TOPICS_KNOWLEDGE_HEADER = "## 知识文件"
-TOPICS_CODE_HEADER = "## 代码模块"
 
 
 def _atomic_write(filepath: Path, content: str) -> None:

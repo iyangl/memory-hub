@@ -117,11 +117,6 @@ def repair(project_root: Path | None = None) -> dict:
                 })
 
     # --- Check 3: Duplicate topics ---
-    topic_counts: dict[str, int] = {}
-    for entry in entries:
-        if entry["topic"]:
-            topic_counts[entry["topic"]] = topic_counts.get(entry["topic"], 0) + 1
-
     # Count topic headers, not entries
     topic_header_lines: dict[str, list[int]] = {}
     for i, line in enumerate(lines):

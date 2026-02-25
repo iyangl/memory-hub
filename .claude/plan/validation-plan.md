@@ -1,14 +1,14 @@
 # Memory Hub 验证计划
 
 > 从零开始，逐步验证每个命令和关键链路。
-> 所有命令在项目根目录执行，使用 `python -m lib.cli` 代替 `memory-hub`。
+> 所有命令在项目根目录执行，使用 `python3 -m lib.cli` 代替 `memory-hub`。
 
 ---
 
 ## 第一步：init — 创建骨架
 
 ```bash
-python -m lib.cli init
+python3 -m lib.cli init
 ```
 
 验证点：
@@ -29,7 +29,7 @@ ls -R .memory/
 ## 第二步：init 幂等性 — 重复执行报错
 
 ```bash
-python -m lib.cli init
+python3 -m lib.cli init
 ```
 
 验证点：
@@ -43,7 +43,7 @@ python -m lib.cli init
 ### 3a. overwrite 模式写入 tech-stack
 
 ```bash
-python -c "import sys; sys.stdout.write('## 技术栈\n\n- Python 3.10+\n- 纯标准库，无外部依赖\n- CLI 入口：python -m lib.cli\n')" | python -m lib.cli write architect tech-stack.md --topic tech-stack --summary "技术栈、关键依赖、使用方式与限制" --mode overwrite
+python3 -c "import sys; sys.stdout.write('## 技术栈\n\n- Python 3.10+\n- 纯标准库，无外部依赖\n- CLI 入口：python3 -m lib.cli\n')" | python3 -m lib.cli write architect tech-stack.md --topic tech-stack --summary "技术栈、关键依赖、使用方式与限制" --mode overwrite
 ```
 
 验证点：
@@ -54,7 +54,7 @@ python -c "import sys; sys.stdout.write('## 技术栈\n\n- Python 3.10+\n- 纯�
 ### 3b. overwrite 模式写入 conventions
 
 ```bash
-python -c "import sys; sys.stdout.write('## 目录结构\n\n- bin/ — CLI 入口\n- lib/ — 核心 Python 模块\n- tests/ — 测试\n- skills/ — Skill 提示词\n')" | python -m lib.cli write dev conventions.md --topic conventions --summary "目录命名规则、模块组织方式、代码约定" --mode overwrite
+python3 -c "import sys; sys.stdout.write('## 目录结构\n\n- bin/ — CLI 入口\n- lib/ — 核心 Python 模块\n- tests/ — 测试\n- skills/ — Skill 提示词\n')" | python3 -m lib.cli write dev conventions.md --topic conventions --summary "目录命名规则、模块组织方式、代码约定" --mode overwrite
 ```
 
 验证点：
@@ -64,7 +64,7 @@ python -c "import sys; sys.stdout.write('## 目录结构\n\n- bin/ — CLI 入�
 ### 3c. append 模式追加内容
 
 ```bash
-python -c "import sys; sys.stdout.write('\n## 命名约定\n\n- 文件名：snake_case\n- 类名：PascalCase\n')" | python -m lib.cli write dev conventions.md --topic conventions --summary "目录命名规则、模块组织方式、代码约定" --mode append
+python3 -c "import sys; sys.stdout.write('\n## 命名约定\n\n- 文件名：snake_case\n- 类名：PascalCase\n')" | python3 -m lib.cli write dev conventions.md --topic conventions --summary "目录命名规则、模块组织方式、代码约定" --mode append
 ```
 
 验证点：
@@ -74,7 +74,7 @@ python -c "import sys; sys.stdout.write('\n## 命名约定\n\n- 文件名：snak
 ### 3d. 创建新文件
 
 ```bash
-python -c "import sys; sys.stdout.write('## 缓存策略\n\n当前不使用缓存。\n')" | python -m lib.cli write architect caching.md --topic caching --summary "缓存策略与决策"
+python3 -c "import sys; sys.stdout.write('## 缓存策略\n\n当前不使用缓存。\n')" | python3 -m lib.cli write architect caching.md --topic caching --summary "缓存策略与决策"
 ```
 
 验证点：
@@ -88,7 +88,7 @@ python -c "import sys; sys.stdout.write('## 缓存策略\n\n当前不使用缓�
 ### 4a. 正常读取
 
 ```bash
-python -m lib.cli read architect tech-stack.md
+python3 -m lib.cli read architect tech-stack.md
 ```
 
 验证点：
@@ -97,7 +97,7 @@ python -m lib.cli read architect tech-stack.md
 ### 4b. 带有效锚点读取
 
 ```bash
-python -m lib.cli read architect tech-stack.md --anchor 技术栈
+python3 -m lib.cli read architect tech-stack.md --anchor 技术栈
 ```
 
 验证点：
@@ -106,7 +106,7 @@ python -m lib.cli read architect tech-stack.md --anchor 技术栈
 ### 4c. 带无效锚点读取
 
 ```bash
-python -m lib.cli read architect tech-stack.md --anchor 不存在的标题
+python3 -m lib.cli read architect tech-stack.md --anchor 不存在的标题
 ```
 
 验证点：
@@ -117,7 +117,7 @@ python -m lib.cli read architect tech-stack.md --anchor 不存在的标题
 ### 4d. 读取不存在的文件
 
 ```bash
-python -m lib.cli read architect nope.md
+python3 -m lib.cli read architect nope.md
 ```
 
 验证点：
@@ -128,7 +128,7 @@ python -m lib.cli read architect nope.md
 ## 第五步：list — 列出桶内文件
 
 ```bash
-python -m lib.cli list architect
+python3 -m lib.cli list architect
 ```
 
 验证点：
@@ -139,7 +139,7 @@ python -m lib.cli list architect
 ## 第六步：search — 全文检索
 
 ```bash
-python -m lib.cli search "Python"
+python3 -m lib.cli search "Python"
 ```
 
 验证点：
@@ -147,7 +147,7 @@ python -m lib.cli search "Python"
 - [ ] 匹配结果中包含 `architect/tech-stack.md`
 
 ```bash
-python -m lib.cli search "zzzznotfound"
+python3 -m lib.cli search "zzzznotfound"
 ```
 
 验证点：
@@ -158,7 +158,7 @@ python -m lib.cli search "zzzznotfound"
 ## 第七步：catalog-update — 更新代码模块索引
 
 ```bash
-python -c "import sys,json; sys.stdout.write(json.dumps({'modules':[{'name':'core','summary':'核心模块：CLI、envelope、路径','files':[{'path':'lib/cli.py','description':'CLI 分发器'},{'path':'lib/envelope.py','description':'统一 JSON envelope'},{'path':'lib/paths.py','description':'路径常量与验证'}]},{'name':'memory','summary':'知识读写命令','files':[{'path':'lib/memory_read.py','description':'memory.read'},{'path':'lib/memory_write.py','description':'memory.write'},{'path':'lib/memory_list.py','description':'memory.list'},{'path':'lib/memory_search.py','description':'memory.search'},{'path':'lib/memory_init.py','description':'memory.init'}]},{'name':'catalog','summary':'索引管理命令','files':[{'path':'lib/catalog_read.py','description':'catalog.read'},{'path':'lib/catalog_update.py','description':'catalog.update'},{'path':'lib/catalog_repair.py','description':'catalog.repair'}]}]},ensure_ascii=False))" | python -m lib.cli catalog-update
+python3 -c "import sys,json; sys.stdout.write(json.dumps({'modules':[{'name':'core','summary':'核心模块：CLI、envelope、路径','files':[{'path':'lib/cli.py','description':'CLI 分发器'},{'path':'lib/envelope.py','description':'统一 JSON envelope'},{'path':'lib/paths.py','description':'路径常量与验证'}]},{'name':'memory','summary':'知识读写命令','files':[{'path':'lib/memory_read.py','description':'memory.read'},{'path':'lib/memory_write.py','description':'memory.write'},{'path':'lib/memory_list.py','description':'memory.list'},{'path':'lib/memory_search.py','description':'memory.search'},{'path':'lib/memory_init.py','description':'memory.init'}]},{'name':'catalog','summary':'索引管理命令','files':[{'path':'lib/catalog_read.py','description':'catalog.read'},{'path':'lib/catalog_update.py','description':'catalog.update'},{'path':'lib/catalog_repair.py','description':'catalog.repair'}]}]},ensure_ascii=False))" | python3 -m lib.cli catalog-update
 ```
 
 验证点：
@@ -169,7 +169,7 @@ python -c "import sys,json; sys.stdout.write(json.dumps({'modules':[{'name':'cor
 
 ```bash
 # 验证 catalog-read 能读到模块索引
-python -m lib.cli catalog-read core
+python3 -m lib.cli catalog-read core
 ```
 
 验证点：
@@ -180,7 +180,7 @@ python -m lib.cli catalog-read core
 ## 第八步：catalog-read — 读取索引
 
 ```bash
-python -m lib.cli catalog-read topics
+python3 -m lib.cli catalog-read topics
 ```
 
 验证点：
@@ -195,7 +195,7 @@ python -m lib.cli catalog-read topics
 ### 9a. 正常状态
 
 ```bash
-python -m lib.cli catalog-repair
+python3 -m lib.cli catalog-repair
 ```
 
 验证点：
@@ -207,7 +207,7 @@ python -m lib.cli catalog-repair
 手动在 topics.md 中添加一行指向不存在文件的引用，然后执行 repair：
 
 ```bash
-python -m lib.cli catalog-repair
+python3 -m lib.cli catalog-repair
 ```
 
 验证点：
