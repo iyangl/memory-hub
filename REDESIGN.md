@@ -100,7 +100,7 @@ AI 在工作过程中主动调用：
 | `memory.write <bucket> <file> --topic <话题名> --summary <描述> [--anchor <锚点>] [--mode append\|overwrite]` | 写知识文件 + 自动更新 topics.md 知识索引；内容通过 stdin 传入 |
 | `catalog.read [topics\|<module>]` | 读取轻量目录或某个功能域的详细索引 |
 | `catalog.update` | 仅更新代码模块索引（catalog/modules/* 和 topics.md 代码模块部分） |
-| `catalog.repair` | 自愈：扫描一致性并修复，输出 fixed + manual_actions |
+| `catalog.repair` | 自愈：扫描一致性并修复，输出 fixed + ai_actions + manual_actions |
 
 ### catalog.repair 契约
 
@@ -160,7 +160,7 @@ Skill（AI 直接执行的提示词流程），不是 MCP 服务。无服务进�
 
 `memory.write` 合并了"写知识文件"和"更新 topics.md"两个操作。脚本内部保证强一致优先：先写知识文件，再更新 topics.md。跨两个文件无法做到严格原子（rename 只保证单文件原子），存在中间态窗口。
 
-应对策略：`catalog.repair` 自愈命令（详见原子 Skill 章节），在写入后自动检查一致性——死链接自动删除，缺注册和无效锚点列入 `manual_actions` 由人工补录。
+应对策略：`catalog.repair` 自愈命令（详见原子 Skill 章节），在写入后自动检查一致性——死链接自动删除（`fixed`），缺注册和可匹配锚点由 AI 自愈（`ai_actions`），重复 topic 和无法匹配的锚点由人工确认（`manual_actions`）。
 
 ### 并发策略
 

@@ -72,7 +72,7 @@ memory-hub/
 - 输入：`<bucket> <file>`
 - 逻辑：验证桶名 → 拼路径 → 读文件 → 返回内容
 - 错误：文件不存在 → `FILE_NOT_FOUND`，桶名非法 → `INVALID_BUCKET`
-- 锚点检测：如果调用方传了 `--anchor`，检查锚点是否存在，不存在时在 `manual_actions` 中提示
+- 锚点检测：如果调用方传了 `--anchor`，检查锚点是否存在。失效时自动触发一次 `catalog.repair`，并将 repair 的 `fixed`/`ai_actions`/`manual_actions` 一并返回
 
 ### 1.2 memory.list
 - 输入：`<bucket>`
@@ -248,7 +248,7 @@ EOF
 
 **Step 5：质量门**
 AI 列出 `unknowns`——无法明确归入任何功能域的文件或目录，输出给用户确认。
-`catalog.repair` 在 init 和 catalog-update 完成后自动执行，AI 检查其输出中的 `manual_actions`，如有则提示用户。
+`catalog.repair` 在 init 和 catalog-update 完成后自动执行，AI 处理其输出：`ai_actions` 非空则立即自愈并再次 repair 确认清零；`manual_actions` 非空则提示用户。
 
 **Step 6：完成**
 输出初始化摘要：创建了哪些文件、识别了哪些模块、有哪些 unknowns 需要确认。
@@ -276,7 +276,7 @@ AI 列出 `unknowns`——无法明确归入任何功能域的文件或目录，
 每个 `lib/` 模块对应一个测试文件：
 - `test_envelope.py`：JSON envelope 格式验证
 - `test_paths.py`：路径解析、桶名验证
-- `test_memory_read.py`：正常读取、文件不存在、非法桶名
+- `test_memory_read.py`：正常读取、文件不存在、非法桶名、失效锚点触发 repair
 - `test_memory_list.py`：列出文件、空桶
 - `test_memory_search.py`：匹配、无结果、跨桶
 - `test_memory_write.py`：新建文件、追加、topics.md 自动更新、基础文件保护
@@ -289,6 +289,7 @@ AI 列出 `unknowns`——无法明确归入任何功能域的文件或目录，
 - 完整 init → write → read → search 流程
 - write 后 topics.md 一致性验证（知识索引条目格式：话题名 + 文件路径 + 一句话描述，每条一行）
 - catalog.update → catalog.repair 链式调用
+- read --anchor 命中失效锚点 → 自动 repair 链路
 
 ---
 
