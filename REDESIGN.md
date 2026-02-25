@@ -97,7 +97,7 @@ AI 在工作过程中主动调用：
 | `memory.read <bucket> <file>` | 精准读取某个桶的某个文件 |
 | `memory.list <bucket>` | 列出桶内所有文件 |
 | `memory.search <query>` | 跨桶全文检索 |
-| `memory.write <bucket> <file> <content> --topic <话题名> --summary <描述> [--anchor <锚点>]` | 写知识文件 + 自动更新 topics.md 知识索引 |
+| `memory.write <bucket> <file> --topic <话题名> --summary <描述> [--anchor <锚点>] [--mode append\|overwrite]` | 写知识文件 + 自动更新 topics.md 知识索引；内容通过 stdin 传入 |
 | `catalog.read [topics\|<module>]` | 读取轻量目录或某个功能域的详细索引 |
 | `catalog.update` | 仅更新代码模块索引（catalog/modules/* 和 topics.md 代码模块部分） |
 | `catalog.repair` | 自愈：扫描一致性并修复，输出 fixed + manual_actions |
@@ -110,9 +110,10 @@ AI 在工作过程中主动调用：
 - 重复 topic：同一话题在 topics.md 中出现多次
 - 无效锚点：`#锚点` 指向的标题在目标文件中不存在
 
-输出分两段：
-- `fixed`：自动修复的项（删除死链接、补注册缺失文件）
-- `manual_actions`：需要人工确认的项（重复 topic 的合并、无效锚点的重新定位）
+输出分三段：
+- `fixed`：脚本自动修复的项（删除死链接）
+- `ai_actions`：AI 自愈的项（缺注册 → AI 读文件生成话题名/描述后调用 `memory.write` 补注册；可匹配的无效锚点 → AI 找到近似标题后自动修正）
+- `manual_actions`：需要人工确认的项（重复 topic 的合并；无法找到近似标题的无效锚点）
 
 触发时机：
 - `memory.init` 完成后自动执行一次
@@ -138,6 +139,7 @@ Skill（AI 直接执行的提示词流程），不是 MCP 服务。无服务进�
   "ok": true,
   "code": "SUCCESS",
   "data": {},
+  "ai_actions": [],
   "manual_actions": []
 }
 ```
@@ -158,7 +160,7 @@ Skill（AI 直接执行的提示词流程），不是 MCP 服务。无服务进�
 
 `memory.write` 合并了"写知识文件"和"更新 topics.md"两个操作。脚本内部保证强一致优先：先写知识文件，再更新 topics.md。跨两个文件无法做到严格原子（rename 只保证单文件原子），存在中间态窗口。
 
-应对策略：`catalog.repair` 自愈命令（详见原子 Skill 章节），在写入后自动检查并修复不一致。
+应对策略：`catalog.repair` 自愈命令（详见原子 Skill 章节），在写入后自动检查一致性——死链接自动删除，缺注册和无效锚点列入 `manual_actions` 由人工补录。
 
 ### 并发策略
 
@@ -229,10 +231,15 @@ init 完成后输出 `unknowns` 列表，列出 AI 不确定归属的文件或�
 
 **topics.md 每次必读**：AI 跨会话无记忆，无法可靠判断自己是否"已知"文件路径。topics.md 严格限制每条一行，100 个话题约 4000 tokens（占上下文 1%-2%），成本可接受，换来的是确定性——AI 永远基于最新索引工作。
 
+**例外**：任务类型为 `quick_fix`（目标文件已明确、单点修改）时，可跳过 `catalog.read topics`，直接操作目标文件。
+
 标准路径：
-1. **接到任务时**，先 `catalog.read topics`，在轻量目录中定位与任务相关的话题和知识文件。
+1. **接到任务时**，先判断任务类型：
+   - `quick_fix`（目标文件明确的单点修改）→ 可跳过 catalog.read topics，直接操作
+   - `scoped_change` / `feature_work` → 先 `catalog.read topics`
 2. **定位到相关话题后**，`memory.read` 读取对应知识文件的完整内容。
 3. **要修改某个功能模块时**，`catalog.read <module>` 读取该功能域的详细索引，找到涉及的关键代码文件，然后去读代码。
+4. **修改代码或做设计决策前**，至少加载 1 个相关 `memory.read`（确认无约束冲突）。
 
 兜底路径：
 - 如果 `catalog.read topics` 中找不到相关话题，使用 `memory.search <关键词>` 跨桶全文检索。search 是 catalog 失效时的安全网，不是常规第一步。
@@ -247,8 +254,14 @@ init 完成后输出 `unknowns` 列表，列出 AI 不确定归属的文件或�
 2. **发现或确认约束时** — "这个模块不能用 X"、"这里必须保持 Y 兼容"。写入对应桶。
 3. **需求讨论达成结论时** — 写入 `pm/<话题>.md`。
 4. **建立了代码约定时** — "错误处理统一用这个模式"、"命名规则是这样"。写入 `dev/<话题>.md`。
-5. **修改了文件结构时** — `catalog.update`，更新话题和文件的映射关系。
+5. **修改了文件结构时** — 标记 `catalog_dirty = true`。
 6. **往基础文件新增话题段落时** — 同步在 `topics.md` 里注册该话题及锚点，确保后续 AI 能通过 catalog 定位到。
+
+**任务结束时**：
+- 若 `catalog_dirty = true` → 执行 `catalog.update`
+- 若本次任务发生过 `memory.write` 或 `catalog.update` → 执行 `catalog.repair`，处理返回结果：
+  - `ai_actions` 非空 → AI 立即自愈（补注册、修正锚点），完成后再次执行 `catalog.repair` 确认清零
+  - `manual_actions` 非空 → 任务结束前向用户报告，列出需要人工确认的项
 
 不需要 write 的场景：只是读了代码、只是执行了已有方案、没有产生新的"为什么"或"不要什么"。
 

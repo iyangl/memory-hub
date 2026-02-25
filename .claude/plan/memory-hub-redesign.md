@@ -59,7 +59,7 @@ memory-hub/
 
 ### 0.3 基础设施
 - `pyproject.toml`：Python 3.10+，无外部依赖，定义 `memory-hub` CLI 入口
-- `lib/envelope.py`：统一 JSON 输出函数 `ok(data, manual_actions=[])` / `fail(code, message, details={})`
+- `lib/envelope.py`：统一 JSON 输出函数 `ok(data, ai_actions=[], manual_actions=[])` / `fail(code, message, details={})`
 - `lib/paths.py`：`.memory/` 路径解析（桶名验证、基础文件列表、modules 路径）
 - `bin/memory-hub`：CLI 分发器，`memory-hub <command> [args]` → 调用对应 `lib/` 模块
 - 退出码：0=成功，1=业务错误，2=系统错误
@@ -146,11 +146,14 @@ memory-hub/
 
 ### 2.3 catalog.repair
 - 固定检查项：
-  1. 死链接：topics.md 指向不存在的文件 → 自动删除
-  2. 缺注册：桶内文件存在但 topics.md 未索引 → 自动补注册
-  3. 重复 topic：同一话题出现多次 → 列入 `manual_actions`
-  4. 无效锚点：`#锚点` 指向的标题不存在 → 列入 `manual_actions`
-- 输出：`{fixed: [...], manual_actions: [...]}`
+  1. 死链接：topics.md 指向不存在的文件 → 自动删除（`fixed`）
+  2. 缺注册：桶内文件存在但 topics.md 未索引 → 列入 `ai_actions`（AI 读文件内容后自行生成话题名/描述，调用 `memory.write` 补注册）
+  3. 重复 topic：同一话题出现多次 → 列入 `manual_actions`（合并决策影响知识完整性，需人工判断）
+  4. 无效锚点：`#锚点` 指向的标题不存在 → 能找到近似标题时列入 `ai_actions`（AI 自动修正）；找不到时列入 `manual_actions`
+- 输出：`{fixed: [...], ai_actions: [...], manual_actions: [...]}`
+- AI 拿到结果后：
+  - `ai_actions` 非空 → 立即自愈，完成后再次执行 `catalog.repair` 确认清零
+  - `manual_actions` 非空 → 任务结束前向用户报告
 
 ---
 
@@ -220,21 +223,27 @@ AI 自行执行（不通过脚本）：
 
 根据读到的内容，生成 `tech-stack.md` 内容，通过脚本写入：
 ```bash
-echo "<markdown content>" | memory-hub write architect tech-stack.md \
-  --topic tech-stack --summary "技术栈、关键依赖、使用方式与限制" --mode overwrite
+memory-hub write architect tech-stack.md \
+  --topic tech-stack --summary "技术栈、关键依赖、使用方式与限制" --mode overwrite <<'EOF'
+<markdown content>
+EOF
 ```
 
 **Step 3：生成代码约定知识**
 AI 根据 Step 2 读到的项目结构，生成 `conventions.md` 内容：
 ```bash
-echo "<markdown content>" | memory-hub write dev conventions.md \
-  --topic conventions --summary "目录命名规则、模块组织方式、代码约定" --mode overwrite
+memory-hub write dev conventions.md \
+  --topic conventions --summary "目录命名规则、模块组织方式、代码约定" --mode overwrite <<'EOF'
+<markdown content>
+EOF
 ```
 
 **Step 4：扫描项目模块，生成 Catalog**
 AI 分析项目目录结构，识别功能域和关键文件，构造 JSON 传给脚本：
 ```bash
-echo '<modules json>' | memory-hub catalog-update
+memory-hub catalog-update <<'EOF'
+<modules json>
+EOF
 ```
 
 **Step 5：质量门**
@@ -257,7 +266,7 @@ AI 列出 `unknowns`——无法明确归入任何功能域的文件或目录，
 - 文件管理规则
 
 ### 5.2 Skill 触发规则
-参考验收指标.md 中的触发规则建议稿，写入 CLAUDE.md。
+以 REDESIGN.md「AI 行为规则」章节为准，写入 CLAUDE.md。不引用验收指标.md。
 
 ---
 
@@ -273,12 +282,12 @@ AI 列出 `unknowns`——无法明确归入任何功能域的文件或目录，
 - `test_memory_write.py`：新建文件、追加、topics.md 自动更新、基础文件保护
 - `test_catalog_read.py`：读 topics、读 module、不存在
 - `test_catalog_update.py`：模块索引生成
-- `test_catalog_repair.py`：四项检查（死链接、缺注册、重复 topic、无效锚点）
+- `test_catalog_repair.py`：四项检查（死链接→fixed、缺注册→ai_actions、重复 topic→manual_actions、无效锚点→ai_actions 或 manual_actions）
 - `test_memory_init.py`：目录创建、已存在报错、repair 自动触发
 
 ### 6.2 集成测试
 - 完整 init → write → read → search 流程
-- write 后 topics.md 一致性验证
+- write 后 topics.md 一致性验证（知识索引条目格式：话题名 + 文件路径 + 一句话描述，每条一行）
 - catalog.update → catalog.repair 链式调用
 
 ---
