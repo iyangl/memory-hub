@@ -4,15 +4,28 @@
 
 ## Skill 列表
 
+| Skill | 说明 |
+|-------|------|
+| `memory.init` | 初始化 `.memory/` 并扫描项目生成知识库 |
+| `memory.read` | 精准读取某个桶的某个文件 |
+| `memory.list` | 列出桶内所有文件 |
+| `memory.search` | 跨桶全文检索 |
+| `memory.index` | AI 直接写内容文件 → 调 index 注册到 topics.md |
+| `catalog.read` | 读取轻量目录或功能域详细索引 |
+| `catalog.update` | AI 写 JSON 文件 → 调 catalog-update --file 更新索引 |
+| `catalog.repair` | 一致性检查与自愈 |
+
+### 命令快查
+
 | Skill | 命令 |
 |-------|------|
 | `memory.init` | `memory-hub init` |
 | `memory.read` | `memory-hub read <bucket> <file> [--anchor <anchor>]` |
 | `memory.list` | `memory-hub list <bucket>` |
 | `memory.search` | `memory-hub search "<query>"` |
-| `memory.write` | `memory-hub write <bucket> <file> --topic <name> --summary "<desc>" [--anchor <anchor>] [--mode append\|overwrite] <<'EOF' ... EOF` |
+| `memory.index` | AI 写 `.memory/<bucket>/<file>` → `memory-hub index <bucket> <file> --topic <name> --summary "<desc>"` |
 | `catalog.read` | `memory-hub catalog-read [topics\|<module>]` |
-| `catalog.update` | `memory-hub catalog-update <<'EOF' <json> EOF` |
+| `catalog.update` | AI 写 JSON 到临时文件 → `memory-hub catalog-update --file <path>` |
 | `catalog.repair` | `memory-hub catalog-repair` |
 
 ## 何时 Read
@@ -44,7 +57,7 @@
 ## 任务结束时
 
 - 若 `catalog_dirty = true` → 执行 `catalog.update`
-- 若本次发生过 `memory.write` 或 `catalog.update` → 执行 `catalog.repair`：
+- 若本次发生过 `memory.index` 或 `catalog.update` → 执行 `catalog.repair`：
   - `ai_actions` 非空 → 立即自愈，再次 repair 确认清零
   - `manual_actions` 非空 → 向用户报告
 
@@ -65,5 +78,5 @@
 ## 文件管理
 
 1. 先 `catalog.read topics` 看话题是否已有知识文件
-2. 有 → `memory.write` 追加
-3. 没有 → `memory.write` 创建新文件（自动注册）
+2. 有 → 直接编辑 `.memory/` 下的文件，然后 `memory-hub index` 更新索引
+3. 没有 → 直接创建文件，然后 `memory-hub index` 注册

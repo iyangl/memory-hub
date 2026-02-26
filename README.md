@@ -62,10 +62,8 @@ memory-hub init
 # 读取
 memory-hub read <bucket> <file> [--anchor <heading>]
 
-# 写入（内容通过 stdin 传入）
-memory-hub write <bucket> <file> --topic <name> --summary "<desc>" [--mode append|overwrite] <<'EOF'
-<markdown content>
-EOF
+# 索引注册（AI 先直接写内容文件到 .memory/<bucket>/<file>，再调 index 注册）
+memory-hub index <bucket> <file> --topic <name> --summary "<desc>"
 
 # 列出桶内文件
 memory-hub list <bucket>
@@ -80,10 +78,8 @@ memory-hub search "<query>"
 # 读取索引
 memory-hub catalog-read [topics|<module>]
 
-# 更新代码模块索引（JSON 通过 stdin 传入）
-memory-hub catalog-update <<'EOF'
-{"modules": [{"name": "...", "summary": "...", "files": [{"path": "...", "description": "..."}]}]}
-EOF
+# 更新代码模块索引（AI 先写 JSON 到文件，再传路径）
+memory-hub catalog-update --file <path-to-json>
 
 # 一致性检查与自愈
 memory-hub catalog-repair
@@ -107,9 +103,9 @@ Memory Hub 通过 Skill 提示词与 AI 编码助手集成。`skills/` 目录包
 | `memory-read` | 精准读取某个桶的某个文件 |
 | `memory-list` | 列出桶内所有文件 |
 | `memory-search` | 跨桶全文检索 |
-| `memory-write` | 写知识文件 + 自动更新 topics.md |
+| `memory-index` | AI 写内容文件 → 注册到 topics.md |
 | `catalog-read` | 读取轻量目录或功能域详细索引 |
-| `catalog-update` | 更新代码模块索引 |
+| `catalog-update` | AI 写 JSON 文件 → 更新代码模块索引 |
 | `catalog-repair` | 一致性检查与自愈 |
 
 ### Claude Code

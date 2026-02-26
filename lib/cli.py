@@ -11,7 +11,7 @@ COMMANDS = {
     "read": "lib.memory_read",
     "list": "lib.memory_list",
     "search": "lib.memory_search",
-    "write": "lib.memory_write",
+    "index": "lib.memory_index",
     "catalog-read": "lib.catalog_read",
     "catalog-update": "lib.catalog_update",
     "catalog-repair": "lib.catalog_repair",

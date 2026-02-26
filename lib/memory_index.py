@@ -1,36 +1,26 @@
-"""memory.write — Write knowledge to a bucket file and update topics.md.
+"""memory.index — Register a knowledge file in topics.md index.
 
-Usage: memory-hub write <bucket> <file> --topic <name> --summary <desc>
-       [--anchor <anchor>] [--mode append|overwrite]
-Content is read from stdin.
+Usage: memory-hub index <bucket> <file> --topic <name> --summary <desc>
+       [--anchor <anchor>]
+
+The target file must already exist in .memory/<bucket>/<file>.
+This command only updates the topics.md knowledge index.
 """
 
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 
 from lib import envelope, paths
+from lib.utils import atomic_write
 
 TOPICS_KNOWLEDGE_HEADER = "## 知识文件"
-
-
-def _atomic_write(filepath: Path, content: str) -> None:
-    """Write content atomically: write to .tmp then rename."""
-    filepath.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = filepath.with_suffix(filepath.suffix + ".tmp")
-    tmp_path.write_text(content, encoding="utf-8")
-    # On Windows, need to remove target first if it exists
-    if filepath.exists():
-        filepath.unlink()
-    tmp_path.rename(filepath)
 
 
 def _update_topics_knowledge(topics_file: Path, topic: str, summary: str,
                              bucket: str, filename: str, anchor: str | None) -> None:
     """Update the knowledge file section of topics.md."""
-    # Build the entry line
     file_ref = f"{bucket}/{filename}"
     if anchor:
         file_ref += f" #{anchor}"
@@ -53,7 +43,6 @@ def _update_topics_knowledge(topics_file: Path, topic: str, summary: str,
             break
 
     if knowledge_start is None:
-        # Append knowledge section at end
         lines.append("")
         lines.append(TOPICS_KNOWLEDGE_HEADER)
         knowledge_start = len(lines) - 1
@@ -72,7 +61,6 @@ def _update_topics_knowledge(topics_file: Path, topic: str, summary: str,
             break
 
     if topic_start is not None:
-        # Check if this exact file ref already exists, update it
         file_prefix = f"- {bucket}/{filename}"
         replaced = False
         for i in range(topic_start + 1, topic_end):
@@ -83,23 +71,20 @@ def _update_topics_knowledge(topics_file: Path, topic: str, summary: str,
         if not replaced:
             lines.insert(topic_end, entry_line)
     else:
-        # Insert new topic subsection before knowledge_end
         insert_lines = [topic_header, entry_line]
         for idx, new_line in enumerate(insert_lines):
             lines.insert(knowledge_end + idx, new_line)
 
-    _atomic_write(topics_file, "\n".join(lines) + "\n")
+    atomic_write(topics_file, "\n".join(lines) + "\n")
 
 
 def run(args: list[str]) -> None:
-    parser = argparse.ArgumentParser(prog="memory-hub write")
+    parser = argparse.ArgumentParser(prog="memory-hub index")
     parser.add_argument("bucket", help="Bucket name (pm/architect/dev/qa)")
     parser.add_argument("file", help="Filename within the bucket")
     parser.add_argument("--topic", required=True, help="Topic name for topics.md index")
     parser.add_argument("--summary", required=True, help="One-line description for topics.md")
     parser.add_argument("--anchor", help="Anchor tag for topics.md reference")
-    parser.add_argument("--mode", choices=["append", "overwrite"], default="append",
-                        help="Write mode: append (default) or overwrite")
     parser.add_argument("--project-root", help="Project root directory", default=None)
     parsed = parser.parse_args(args)
 
@@ -109,27 +94,10 @@ def run(args: list[str]) -> None:
     if err:
         envelope.fail("INVALID_BUCKET", f"Invalid bucket: {parsed.bucket}. Valid: {', '.join(paths.BUCKETS)}")
 
-    # Read content from stdin
-    if sys.stdin.isatty():
-        envelope.fail("NO_INPUT", "Content must be provided via stdin.")
-    content = sys.stdin.read()
-    if not content.strip():
-        envelope.fail("EMPTY_CONTENT", "Stdin content is empty.")
-
+    # Verify target file exists
     fp = paths.file_path(parsed.bucket, parsed.file, project_root)
-
-    # Write knowledge file
-    if parsed.mode == "overwrite":
-        _atomic_write(fp, content)
-    else:
-        # append
-        fp.parent.mkdir(parents=True, exist_ok=True)
-        existing = ""
-        if fp.exists():
-            existing = fp.read_text(encoding="utf-8")
-        if existing and not existing.endswith("\n"):
-            existing += "\n"
-        _atomic_write(fp, existing + content)
+    if not fp.exists():
+        envelope.fail("FILE_NOT_FOUND", f"Target file does not exist: {parsed.bucket}/{parsed.file}. Write the file first, then call index.")
 
     # Update topics.md knowledge index
     topics_file = paths.topics_path(project_root)
@@ -140,6 +108,4 @@ def run(args: list[str]) -> None:
         "bucket": parsed.bucket,
         "file": parsed.file,
         "topic": parsed.topic,
-        "mode": parsed.mode,
-        "bytes_written": len(content.encode("utf-8")),
     })

@@ -10,7 +10,7 @@ import argparse
 from pathlib import Path
 
 from lib import envelope, paths
-from lib.memory_write import _atomic_write
+from lib.utils import atomic_write
 
 TOPICS_SKELETON = """\
 # Memory Hub — Topics Index
@@ -50,7 +50,7 @@ def run(args: list[str]) -> None:
     modules_dir.mkdir(parents=True, exist_ok=True)
 
     topics_file = paths.topics_path(project_root)
-    _atomic_write(topics_file, TOPICS_SKELETON)
+    atomic_write(topics_file, TOPICS_SKELETON)
     created_files.append("catalog/topics.md")
 
     # Auto-trigger catalog.repair

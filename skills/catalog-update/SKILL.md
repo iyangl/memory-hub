@@ -1,7 +1,7 @@
 ---
 name: catalog-update
 description: "更新代码模块索引（catalog/modules/* 和 topics.md 代码模块部分）"
-tools: ["Bash"]
+tools: ["Bash", "Write"]
 ---
 
 ## Purpose
@@ -10,7 +10,7 @@ Update the code module index from AI-generated JSON. Only touches the code modul
 
 ## Input
 
-JSON via stdin with schema:
+JSON file with schema:
 
 ```json
 {
@@ -28,10 +28,14 @@ JSON via stdin with schema:
 
 ## Required Flow
 
+### Step 1: Write JSON to a temporary file
+
+Use the file write tool to create a JSON file (e.g. `/tmp/modules.json`).
+
+### Step 2: Run catalog-update
+
 ```bash
-memory-hub catalog-update <<'EOF'
-<modules JSON>
-EOF
+memory-hub catalog-update --file /tmp/modules.json
 ```
 
 Automatically triggers `catalog.repair` after completion.
@@ -42,6 +46,6 @@ JSON envelope with `data.modules_written`, `data.modules_deleted`, and repair re
 
 ## Error Handling
 
-- `NO_INPUT` → no stdin provided
-- `INVALID_JSON` → stdin is not valid JSON
+- `FILE_NOT_FOUND` → JSON file not found
+- `INVALID_JSON` → file is not valid JSON
 - `INVALID_SCHEMA` → `modules` is not an array

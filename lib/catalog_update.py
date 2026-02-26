@@ -8,11 +8,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
 from lib import envelope, paths
-from lib.memory_write import _atomic_write
+from lib.utils import atomic_write
 
 TOPICS_CODE_HEADER = "## 代码模块"
 TOPICS_KNOWLEDGE_HEADER = "## 知识文件"
@@ -68,23 +67,25 @@ def _update_topics_code_section(topics_file: Path, modules: list[dict]) -> None:
                 lines.append("")
             lines.extend(new_code_lines)
 
-    _atomic_write(topics_file, "\n".join(lines) + "\n")
+    atomic_write(topics_file, "\n".join(lines) + "\n")
 
 
 def run(args: list[str]) -> None:
     parser = argparse.ArgumentParser(prog="memory-hub catalog-update")
+    parser.add_argument("--file", required=True, help="Path to JSON file with module definitions")
     parser.add_argument("--project-root", help="Project root directory", default=None)
     parsed = parser.parse_args(args)
 
     project_root = Path(parsed.project_root) if parsed.project_root else None
 
-    # Read JSON from stdin
-    if sys.stdin.isatty():
-        envelope.fail("NO_INPUT", "Module index JSON must be provided via stdin.")
+    # Read JSON from file
+    json_path = Path(parsed.file)
+    if not json_path.exists():
+        envelope.fail("FILE_NOT_FOUND", f"JSON file not found: {parsed.file}")
     try:
-        data = json.loads(sys.stdin.read())
+        data = json.loads(json_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
-        envelope.fail("INVALID_JSON", f"Failed to parse stdin JSON: {e}")
+        envelope.fail("INVALID_JSON", f"Failed to parse JSON file: {e}")
 
     modules = data.get("modules", [])
     if not isinstance(modules, list):
@@ -102,7 +103,7 @@ def run(args: list[str]) -> None:
             continue
         new_module_names.add(name)
         md_content = _generate_module_md(m)
-        _atomic_write(modules_dir / f"{name}.md", md_content)
+        atomic_write(modules_dir / f"{name}.md", md_content)
 
     # Delete old module files not in new list
     deleted = []

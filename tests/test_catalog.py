@@ -7,7 +7,7 @@ from io import StringIO
 import sys
 
 from lib import paths
-from lib.memory_write import _atomic_write
+from lib.utils import atomic_write
 
 
 @pytest.fixture
@@ -70,9 +70,12 @@ class TestCatalogUpdate:
                 }
             ]
         })
+        # Write JSON to a temp file
+        json_file = initialized_project / "modules.json"
+        json_file.write_text(modules_json, encoding="utf-8")
         result, code = run_cmd("lib.catalog_update",
-                               ["--project-root", str(initialized_project)],
-                               stdin_content=modules_json)
+                               ["--file", str(json_file),
+                                "--project-root", str(initialized_project)])
         assert code == 0
         assert "core" in result["data"]["modules_written"]
         # Check module file exists
@@ -86,9 +89,11 @@ class TestCatalogUpdate:
         old = initialized_project / ".memory" / "catalog" / "modules" / "old.md"
         old.write_text("# old\n", encoding="utf-8")
         modules_json = json.dumps({"modules": [{"name": "new", "summary": "新模块", "files": []}]})
+        json_file = initialized_project / "modules.json"
+        json_file.write_text(modules_json, encoding="utf-8")
         result, code = run_cmd("lib.catalog_update",
-                               ["--project-root", str(initialized_project)],
-                               stdin_content=modules_json)
+                               ["--file", str(json_file),
+                                "--project-root", str(initialized_project)])
         assert code == 0
         assert "old.md" in result["data"]["modules_deleted"]
         assert not old.exists()

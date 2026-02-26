@@ -113,7 +113,7 @@ def repair(project_root: Path | None = None) -> dict:
                 ai_actions.append({
                     "type": "missing_registration",
                     "file": rel,
-                    "action": f"Read {rel} and register in topics.md with appropriate topic/summary via memory.write",
+                    "action": f"Read {rel} and register in topics.md with appropriate topic/summary via memory.index",
                 })
 
     # --- Check 3: Duplicate topics ---
@@ -202,8 +202,8 @@ def repair(project_root: Path | None = None) -> dict:
                     continue  # Skip empty topic header
             cleaned.append(line)
 
-        from lib.memory_write import _atomic_write
-        _atomic_write(topics_file, "\n".join(cleaned) + "\n")
+        from lib.utils import atomic_write
+        atomic_write(topics_file, "\n".join(cleaned) + "\n")
 
     return {"fixed": fixed, "ai_actions": ai_actions, "manual_actions": manual_actions}
 

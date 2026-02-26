@@ -31,5 +31,5 @@ JSON envelope with:
 ## Post-Processing
 
 After receiving results:
-- `ai_actions` non-empty → AI executes self-healing (register missing files via `memory.write`, fix anchors), then runs `catalog-repair` again to confirm cleared
+- `ai_actions` non-empty → AI executes self-healing (register missing files via `memory.index`, fix anchors), then runs `catalog-repair` again to confirm cleared
 - `manual_actions` non-empty → report to user before task ends
