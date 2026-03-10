@@ -14,3 +14,4 @@ htmlcov/
 !skills/
 !skills/**/
 !skills/**/SKILL.md
+!.memory/
