@@ -36,6 +36,18 @@ class TestOk:
         assert result["ai_actions"] == [{"type": "fix"}]
         assert result["manual_actions"] == [{"type": "review"}]
 
+    def test_ok_with_custom_code_and_message(self):
+        from lib.envelope import ok
+        result, code = _capture_envelope(
+            ok,
+            {"proposal_id": 1},
+            code="PROPOSAL_APPROVED",
+            message="Proposal approved.",
+        )
+        assert code == 0
+        assert result["code"] == "PROPOSAL_APPROVED"
+        assert result["message"] == "Proposal approved."
+
     def test_ok_defaults(self):
         from lib.envelope import ok
         result, code = _capture_envelope(ok)

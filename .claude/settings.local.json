@@ -4,7 +4,9 @@
       "Bash(test:*)",
       "mcp__ace-tool__search_context",
       "Bash(python:*)",
-      "Bash(python -m lib.cli write:*)",
+      "Bash(python -m lib.cli review:*)",
+      "Bash(python -m lib.cli rollback:*)",
+      "Bash(bin/selftest-phase1c:*)",
       "Bash(pip install:*)"
     ]
   },

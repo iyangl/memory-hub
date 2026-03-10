@@ -1,139 +1,217 @@
 # Memory Hub
 
-项目知识库 + 按需检索。让 AI 在工作过程中主动取到所需的上下文，而不是靠用户每次手动喂，也不是会话开始一次性加载大包。
+项目知识库 + durable memory 控制面。
 
-## 核心理念
+当前仓库同时包含两套能力：
 
-**只存代码读不到的内容**：设计决策、约束集、演进历史、隐性前提、已知取舍。
+1. `.memory/` 文件型项目知识库
+2. `.memoryhub/` SQLite durable memory v1
 
-**脚本是执行器，AI 是决策者**。所有脚本返回统一 JSON envelope，AI 通过 Skill 提示词驱动工作流。无服务进程、无数据库、无协议层。
+前者服务“项目知识读写与 catalog 索引”，后者服务“LLM 长期记忆的 propose/review/rollback 闭环”。
+
+## 核心原则
+
+- 只沉淀代码读不到的信息
+- durable memory 不允许直写，必须经过 `propose -> review -> approve/reject`
+- 审查与回滚走 CLI
+- LLM 通过本地 stdio MCP server 调 durable memory tools
 
 ## 安装
 
 ### 前置条件
 
 - Python 3.10+
-- 无外部依赖（纯标准库）
+- 运行时无第三方依赖
 
-### 方式一：直接使用（推荐）
+### 直接运行
 
 ```bash
-# 从项目根目录运行
 python3 -m lib.cli <command> [args]
+python3 -m lib.mcp_server
 ```
 
-### 方式二：pip 安装
+### pip 安装
 
 ```bash
 pip install -e .
 
-# 安装后可直接使用
 memory-hub <command> [args]
+memory-hub-mcp
 ```
 
-## 存储结构
+## 两套存储面
 
-```
+### `.memory/`
+
+项目知识文件与 catalog：
+
+```text
 .memory/
-├── pm/decisions.md            # 需求结论与产品决策
+├── pm/
 ├── architect/
-│   ├── tech-stack.md          # 技术栈、关键依赖、使用方式与限制
-│   └── decisions.md           # 设计决策日志（Decision Log 格式）
-├── dev/conventions.md         # 代码约定、命名规则、模式
-├── qa/strategy.md             # 测试策略与质量约束
+├── dev/
+├── qa/
 └── catalog/
-    ├── topics.md              # 轻量目录：所有内容的统一入口
-    └── modules/               # 详细索引：每个功能域一个文件
 ```
 
-## CLI 命令
+用于记录项目级设计决策、约束、约定和目录索引。
 
-### 初始化
+### `.memoryhub/`
+
+durable memory v1：
+
+```text
+.memoryhub/
+└── memory.db
+```
+
+用于存储：
+
+- `approved_memories`
+- `memory_versions`
+- `memory_proposals`
+- `audit_events`
+
+## 文件型知识命令
 
 ```bash
 memory-hub init
-```
-
-创建 `.memory/` 目录骨架和基础文件模板。已存在时返回 `ALREADY_INITIALIZED`。
-
-### 知识读写
-
-```bash
-# 读取
 memory-hub read <bucket> <file> [--anchor <heading>]
-
-# 索引注册（AI 先直接写内容文件到 .memory/<bucket>/<file>，再调 index 注册）
-memory-hub index <bucket> <file> --topic <name> --summary "<desc>"
-
-# 列出桶内文件
 memory-hub list <bucket>
-
-# 跨桶全文检索
 memory-hub search "<query>"
-```
-
-### Catalog 索引管理
-
-```bash
-# 读取索引
+memory-hub index <bucket> <file> --topic <name> --summary "<desc>"
 memory-hub catalog-read [topics|<module>]
-
-# 更新代码模块索引（AI 先写 JSON 到文件，再传路径）
 memory-hub catalog-update --file <path-to-json>
-
-# 一致性检查与自愈
 memory-hub catalog-repair
 ```
 
-### 退出码
+这套命令仍然服务 `.memory/` 目录，不参与 durable memory v1 的写入审查。
 
-| 退出码 | 含义 |
-|--------|------|
-| 0 | 成功 |
-| 1 | 业务错误（详见 `code` 字段） |
-| 2 | 系统错误 |
+## Durable Memory CLI
 
-## AI Skill 集成
-
-Memory Hub 通过 Skill 提示词与 AI 编码助手集成。`skills/` 目录包含 8 个原子 Skill：
-
-| Skill | 说明 |
-|-------|------|
-| `memory-init` | 初始化 `.memory/` 并扫描项目生成知识库 |
-| `memory-read` | 精准读取某个桶的某个文件 |
-| `memory-list` | 列出桶内所有文件 |
-| `memory-search` | 跨桶全文检索 |
-| `memory-index` | AI 写内容文件 → 注册到 topics.md |
-| `catalog-read` | 读取轻量目录或功能域详细索引 |
-| `catalog-update` | AI 写 JSON 文件 → 更新代码模块索引 |
-| `catalog-repair` | 一致性检查与自愈 |
-
-### Claude Code
-
-将 `skills/` 目录保留在项目中即可。Claude Code 会自动发现项目内的 `SKILL.md` 文件。
-
-AI 行为规则写在 `CLAUDE.md` 中，指引 AI 何时该读、何时该写。
-
-### OpenAI Codex
-
-Skill 的 frontmatter 格式兼容 Codex 的 agents 约定。将 `skills/` 软链接或复制为 `.codex/skills/` 即可。
-
-## 检索流程
-
-```
-1. catalog.read topics     → 读轻量目录，定位相关话题（几十行）
-2. catalog.read <module>   → 只读该功能域的详细索引（十几行）
-3. memory.read <bucket> <file> → 读相关知识文件
-```
-
-每一步只取最小需要的那一块。`memory.search` 作为 catalog 失效时的兜底安全网。
-
-## 运行测试
+审查与回滚统一走 CLI：
 
 ```bash
-pip install -e ".[dev]"
-python3 -m pytest tests/ -v
+memory-hub review list
+memory-hub review show <proposal_id>
+memory-hub review approve <proposal_id> [--reviewer <id>] [--note <text>]
+memory-hub review reject <proposal_id> --note <text> [--reviewer <id>]
+memory-hub rollback <uri> --to-version <version_id> --note <text> [--reviewer <id>]
 ```
+
+## Durable Memory MCP
+
+本地 stdio MCP server：
+
+```bash
+python3 -m lib.mcp_server
+```
+
+或：
+
+```bash
+memory-hub-mcp
+```
+
+当前暴露 4 个 tools：
+
+- `read_memory`
+- `search_memory`
+- `propose_memory`
+- `propose_memory_update`
+
+### 客户端配置示例
+
+如果直接用源码目录运行，推荐这样配：
+
+```json
+{
+  "mcpServers": {
+    "memory-hub": {
+      "command": "python3",
+      "args": ["-m", "lib.mcp_server"],
+      "cwd": "/absolute/path/to/memory-hub",
+      "env": {
+        "PYTHONPATH": "/absolute/path/to/memory-hub",
+        "MEMORY_HUB_PROJECT_ROOT": "/absolute/path/to/target-project"
+      }
+    }
+  }
+}
+```
+
+如果已经 `pip install -e .`，也可以改成：
+
+```json
+{
+  "mcpServers": {
+    "memory-hub": {
+      "command": "memory-hub-mcp",
+      "env": {
+        "MEMORY_HUB_PROJECT_ROOT": "/absolute/path/to/target-project"
+      }
+    }
+  }
+}
+```
+
+### Durable Memory 推荐工作流
+
+1. 会话开始或首次触发 durable memory 时，先调 `read_memory("system://boot")`
+2. 需要检索已有长期记忆时，调 `search_memory`
+3. 发现新长期信息时，调 `propose_memory`
+4. 发现应更新已有长期记忆时，调 `propose_memory_update`
+5. 人类用 CLI `review approve/reject`
+6. 必要时用 CLI `rollback`
+
+禁止事项：
+
+- 直接修改 `.memoryhub/`
+- 直接改 SQLite
+- 用 `.memory/` 文件型命令代替 durable memory proposal
+
+## 自测
+
+一键端到端自测：
+
+```bash
+bin/selftest-phase1c
+```
+
+保留测试数据目录：
+
+```bash
+bin/selftest-phase1c --keep-root
+```
+
+这个脚本会自动验证：
+
+- MCP `initialize`
+- `tools/list`
+- `read_memory(system://boot)`
+- `propose_memory`
+- `review list/show/approve`
+- `propose_memory_update`
+- `rollback`
+- 预期错误路径
+
+## 测试
+
+```bash
+pytest -q
+```
+
+## 退出码
+
+CLI 退出码：
+
+- `0` 成功
+- `1` 业务错误
+- `2` 系统错误
+
+## 备注
+
+`REDESIGN.md` 主要记录早期 `.memory/` 文件型工作流的重构背景。durable memory v1 的当前基线，以 `README.md`、`CLAUDE.md`、`.archive/plans/*contract*` 和 `.archive/plans/*mvp-plan*` 为准。
 
 ## 许可
 

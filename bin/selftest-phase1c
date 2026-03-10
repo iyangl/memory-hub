@@ -1,0 +1,272 @@
+#!/usr/bin/env python3
+"""End-to-end self-test for durable memory Phase 1C."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from typing import Any
+ROOT = Path(__file__).resolve().parent.parent
+class StepFailed(RuntimeError):
+    """Raised when a self-test step fails."""
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="bin/selftest-phase1c")
+    parser.add_argument(
+        "--project-root",
+        help="Use an existing empty project root instead of creating a temp directory.",
+    )
+    parser.add_argument(
+        "--keep-root",
+        action="store_true",
+        help="Keep the project root after the script exits.",
+    )
+    return parser.parse_args()
+def build_project_root(args: argparse.Namespace) -> tuple[Path, bool]:
+    if args.project_root:
+        root = Path(args.project_root).expanduser().resolve()
+        root.mkdir(parents=True, exist_ok=True)
+        return root, False
+    temp_root = Path(tempfile.mkdtemp(prefix="memory-hub-selftest."))
+    return temp_root, True
+def run_process(command: list[str], *, env: dict[str, str], input_text: str | None = None) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        cwd=ROOT,
+        env=env,
+        input=input_text,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+def run_cli(env: dict[str, str], *args: str) -> dict[str, Any]:
+    result = run_process([sys.executable, "-m", "lib.cli", *args], env=env)
+    if result.returncode not in {0, 1, 2}:
+        raise StepFailed(f"Unexpected CLI exit code {result.returncode} for: {' '.join(args)}")
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise StepFailed(f"CLI did not return JSON for {' '.join(args)}:\n{result.stdout}\n{result.stderr}") from exc
+    payload["_exit_code"] = result.returncode
+    return payload
+def call_mcp(env: dict[str, str], message: dict[str, Any]) -> dict[str, Any]:
+    result = run_process(
+        [sys.executable, "-m", "lib.mcp_server"],
+        env=env,
+        input_text=json.dumps(message, ensure_ascii=False) + "\n",
+    )
+    if result.returncode != 0:
+        raise StepFailed(f"MCP server exited with {result.returncode}:\n{result.stderr}")
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    if len(lines) != 1:
+        raise StepFailed(f"MCP server returned unexpected output:\n{result.stdout}")
+    try:
+        return json.loads(lines[0])
+    except json.JSONDecodeError as exc:
+        raise StepFailed(f"MCP response is not JSON:\n{result.stdout}") from exc
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        raise StepFailed(message)
+def require_jsonrpc_ok(response: dict[str, Any], request_id: int) -> dict[str, Any]:
+    require(response.get("jsonrpc") == "2.0", f"Invalid jsonrpc response: {response}")
+    require(response.get("id") == request_id, f"Unexpected response id: {response}")
+    require("result" in response, f"Expected result payload, got: {response}")
+    return response["result"]
+def require_tool_payload(result: dict[str, Any], *, is_error: bool | None = None) -> dict[str, Any]:
+    require("structuredContent" in result, f"Missing structuredContent: {result}")
+    if is_error is not None:
+        require(result.get("isError") is is_error, f"Unexpected isError={result.get('isError')}: {result}")
+    return result["structuredContent"]
+def print_step(title: str) -> None:
+    print(f"[selftest] {title}")
+def main() -> int:
+    args = parse_args()
+    project_root, created_temp = build_project_root(args)
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(ROOT) + os.pathsep + env.get("PYTHONPATH", "")
+    env["MEMORY_HUB_PROJECT_ROOT"] = str(project_root)
+    try:
+        print_step(f"project_root={project_root}")
+        print_step("initialize MCP server")
+        init = call_mcp(env, {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+        init_result = require_jsonrpc_ok(init, 1)
+        require(init_result["protocolVersion"] == "2025-11-25", "Unexpected protocolVersion")
+        print_step("list tools")
+        tools = call_mcp(env, {"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+        tool_result = require_jsonrpc_ok(tools, 2)
+        tool_names = [tool["name"] for tool in tool_result["tools"]]
+        require(tool_names == ["read_memory", "search_memory", "propose_memory", "propose_memory_update"], f"Unexpected tool list: {tool_names}")
+        print_step("read empty system://boot")
+        boot = call_mcp(
+            env,
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {"name": "read_memory", "arguments": {"uri": "system://boot"}},
+            },
+        )
+        boot_payload = require_tool_payload(require_jsonrpc_ok(boot, 3), is_error=False)
+        require(boot_payload["code"] == "MEMORY_READ", f"Unexpected boot code: {boot_payload}")
+        require(boot_payload["data"]["items"] == [], f"Expected empty boot memories: {boot_payload}")
+        print_step("create proposal via MCP")
+        create = call_mcp(
+            env,
+            {
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "tools/call",
+                "params": {
+                    "name": "propose_memory",
+                    "arguments": {
+                        "type": "decision",
+                        "title": "Contract First Smoke",
+                        "content": "Adopt contract-first development for durable memory.",
+                        "recall_when": "when planning",
+                        "why_not_in_code": "design rationale is outside code",
+                        "source_reason": "self test",
+                    },
+                },
+            },
+        )
+        create_payload = require_tool_payload(require_jsonrpc_ok(create, 4), is_error=False)
+        require(create_payload["code"] == "PROPOSAL_CREATED", f"Unexpected create payload: {create_payload}")
+        require(create_payload["data"]["proposal_id"] == 1, f"Unexpected proposal id: {create_payload}")
+        require(create_payload["data"]["target_uri"] == "decision://contract-first-smoke", f"Unexpected target_uri: {create_payload}")
+        print_step("review list/show/approve")
+        review_list = run_cli(env, "review", "list", "--project-root", str(project_root))
+        require(review_list["_exit_code"] == 0, f"review list failed: {review_list}")
+        require(review_list["code"] == "REVIEW_QUEUE_OK", f"Unexpected review list payload: {review_list}")
+        require(len(review_list["data"]["items"]) == 1, f"Expected one pending proposal: {review_list}")
+        review_show = run_cli(env, "review", "show", "1", "--project-root", str(project_root))
+        require(review_show["_exit_code"] == 0, f"review show failed: {review_show}")
+        require(review_show["code"] == "PROPOSAL_DETAIL_OK", f"Unexpected review show payload: {review_show}")
+        review_approve = run_cli(
+            env,
+            "review",
+            "approve",
+            "1",
+            "--reviewer",
+            "selftest",
+            "--note",
+            "approve create",
+            "--project-root",
+            str(project_root),
+        )
+        require(review_approve["_exit_code"] == 0, f"review approve failed: {review_approve}")
+        require(review_approve["code"] == "PROPOSAL_APPROVED", f"Unexpected approve payload: {review_approve}")
+        require(review_approve["data"]["to_version_id"] == 1, f"Unexpected version after approve: {review_approve}")
+        print_step("read approved memory")
+        read_memory = call_mcp(
+            env,
+            {
+                "jsonrpc": "2.0",
+                "id": 5,
+                "method": "tools/call",
+                "params": {"name": "read_memory", "arguments": {"uri": "decision://contract-first-smoke"}},
+            },
+        )
+        read_payload = require_tool_payload(require_jsonrpc_ok(read_memory, 5), is_error=False)
+        require(read_payload["data"]["current_version_id"] == 1, f"Unexpected read payload: {read_payload}")
+        print_step("create update proposal via MCP")
+        update = call_mcp(
+            env,
+            {
+                "jsonrpc": "2.0",
+                "id": 6,
+                "method": "tools/call",
+                "params": {
+                    "name": "propose_memory_update",
+                    "arguments": {
+                        "uri": "decision://contract-first-smoke",
+                        "append": "\nAlways define contracts before implementation.",
+                        "source_reason": "self test update",
+                    },
+                },
+            },
+        )
+        update_payload = require_tool_payload(require_jsonrpc_ok(update, 6), is_error=False)
+        require(update_payload["code"] == "PROPOSAL_CREATED", f"Unexpected update payload: {update_payload}")
+        require(update_payload["data"]["proposal_id"] == 2, f"Unexpected update proposal id: {update_payload}")
+        print_step("approve update and rollback")
+        review_approve_update = run_cli(
+            env,
+            "review",
+            "approve",
+            "2",
+            "--reviewer",
+            "selftest",
+            "--note",
+            "approve update",
+            "--project-root",
+            str(project_root),
+        )
+        require(review_approve_update["_exit_code"] == 0, f"update approve failed: {review_approve_update}")
+        require(review_approve_update["data"]["to_version_id"] == 2, f"Unexpected update version: {review_approve_update}")
+        rollback = run_cli(
+            env,
+            "rollback",
+            "decision://contract-first-smoke",
+            "--to-version",
+            "1",
+            "--note",
+            "rollback to v1",
+            "--reviewer",
+            "selftest",
+            "--project-root",
+            str(project_root),
+        )
+        require(rollback["_exit_code"] == 0, f"rollback failed: {rollback}")
+        require(rollback["code"] == "ROLLBACK_APPLIED", f"Unexpected rollback payload: {rollback}")
+        require(rollback["data"]["to_version_id"] == 3, f"Unexpected rollback version: {rollback}")
+        print_step("verify final approved content")
+        final_read = call_mcp(
+            env,
+            {
+                "jsonrpc": "2.0",
+                "id": 7,
+                "method": "tools/call",
+                "params": {"name": "read_memory", "arguments": {"uri": "decision://contract-first-smoke"}},
+            },
+        )
+        final_payload = require_tool_payload(require_jsonrpc_ok(final_read, 7), is_error=False)
+        require(
+            final_payload["data"]["content"] == "Adopt contract-first development for durable memory.",
+            f"Unexpected final content after rollback: {final_payload}",
+        )
+        print_step("verify expected error path")
+        missing_update = call_mcp(
+            env,
+            {
+                "jsonrpc": "2.0",
+                "id": 8,
+                "method": "tools/call",
+                "params": {
+                    "name": "propose_memory_update",
+                    "arguments": {
+                        "uri": "decision://missing",
+                        "old_string": "a",
+                        "new_string": "b",
+                        "source_reason": "self test error",
+                    },
+                },
+            },
+        )
+        missing_payload = require_tool_payload(require_jsonrpc_ok(missing_update, 8), is_error=True)
+        require(missing_payload["code"] == "MEMORY_NOT_FOUND", f"Unexpected error payload: {missing_payload}")
+        print_step("success")
+        print(json.dumps({"ok": True, "project_root": str(project_root)}, ensure_ascii=False, indent=2))
+        return 0
+    except StepFailed as exc:
+        print(json.dumps({"ok": False, "project_root": str(project_root), "error": str(exc)}, ensure_ascii=False, indent=2))
+        return 1
+    finally:
+        if created_temp and not args.keep_root:
+            shutil.rmtree(project_root, ignore_errors=True)
+if __name__ == "__main__":
+    raise SystemExit(main())

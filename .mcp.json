@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "memory-hub": {
+      "command": "python3",
+      "args": [
+        "-m",
+        "lib.mcp_server"
+      ],
+      "cwd": ".",
+      "env": {
+        "MEMORY_HUB_PROJECT_ROOT": "."
+      },
+      "alwaysAllow": [
+        "read_memory",
+        "search_memory",
+        "propose_memory",
+        "propose_memory_update"
+      ]
+    }
+  }
+}

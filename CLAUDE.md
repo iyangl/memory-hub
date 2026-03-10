@@ -1,82 +1,95 @@
 # Memory Hub — AI 行为指引
 
-本项目使用 Memory Hub 管理项目知识。`.memory/` 目录存储代码读不到的知识（设计决策、约束、演进历史、隐性前提、已知取舍）。
+本仓库当前包含两套 memory surface，必须区分使用：
+
+1. `.memory/`
+   - 项目知识文件
+   - 通过 `read/list/search/index/catalog-*` 维护
+2. `.memoryhub/`
+   - durable memory v1
+   - 通过 `MCP propose/read/search + CLI review/rollback` 维护
 
 ## Skill 列表
 
 | Skill | 说明 |
 |-------|------|
-| `memory.init` | 初始化 `.memory/` 并扫描项目生成知识库 |
-| `memory.read` | 精准读取某个桶的某个文件 |
-| `memory.list` | 列出桶内所有文件 |
-| `memory.search` | 跨桶全文检索 |
-| `memory.index` | AI 直接写内容文件 → 调 index 注册到 topics.md |
-| `catalog.read` | 读取轻量目录或功能域详细索引 |
-| `catalog.update` | AI 写 JSON 文件 → 调 catalog-update --file 更新索引 |
+| `memory.init` | 初始化 `.memory/` 并生成项目知识骨架 |
+| `memory.read` | 精准读取 `.memory/` 知识文件 |
+| `memory.list` | 列出 `.memory/` bucket 文件 |
+| `memory.search` | 跨 bucket 全文检索 `.memory/` |
+| `memory.index` | 注册 `.memory/` 知识文件到 topics.md |
+| `catalog.read` | 读取轻量目录或模块索引 |
+| `catalog.update` | 更新代码模块索引 |
 | `catalog.repair` | 一致性检查与自愈 |
+| `durable-memory` | durable memory v1：MCP tools + CLI review 工作流 |
 
-### 命令快查
+## `.memory/` 项目知识工作流
 
-| Skill | 命令 |
-|-------|------|
-| `memory.init` | `memory-hub init` |
-| `memory.read` | `memory-hub read <bucket> <file> [--anchor <anchor>]` |
-| `memory.list` | `memory-hub list <bucket>` |
-| `memory.search` | `memory-hub search "<query>"` |
-| `memory.index` | AI 写 `.memory/<bucket>/<file>` → `memory-hub index <bucket> <file> --topic <name> --summary "<desc>"` |
-| `catalog.read` | `memory-hub catalog-read [topics\|<module>]` |
-| `catalog.update` | AI 写 JSON 到临时文件 → `memory-hub catalog-update --file <path>` |
-| `catalog.repair` | `memory-hub catalog-repair` |
+适用场景：
 
-## 何时 Read
+- 记录本仓库自身的设计决策、约束、约定
+- 维护 `topics.md` 与 `catalog/modules/*`
 
-**触发条件：即将修改代码或做决策之前。**
+读：
 
-1. 判断任务类型：
-   - `quick_fix`（目标文件明确的单点修改）→ 可跳过 catalog.read topics
-   - `scoped_change` / `feature_work` → 先 `catalog.read topics`
-2. 定位到相关话题后，`memory.read` 读取对应知识文件
-3. 要修改某个功能模块时，`catalog.read <module>` 读取详细索引
-4. 修改代码或做设计决策前，至少加载 1 个相关 `memory.read`
+1. `scoped_change` / `feature_work` 前先 `catalog-read topics`
+2. 再 `memory.read` 相关知识文件
+3. catalog 不够时用 `memory.search`
 
-兜底：`catalog.read topics` 找不到相关话题时，用 `memory.search` 跨桶检索。
+写：
 
-## 何时 Write
+1. AI 直接编辑 `.memory/<bucket>/<file>`
+2. 再运行 `memory-hub index ...`
+3. 若代码模块索引变更，运行 `memory-hub catalog-update --file ...`
+4. 任务结束前执行 `memory-hub catalog-repair`
 
-**触发条件：产生了新的、代码里读不到的知识。**
+## Durable Memory v1 工作流
 
-判断标准：如果下一个会话的 AI 不知道这件事，会不会做出错误的决定？会 → 写，不会 → 不写。
+适用场景：
 
-1. 做出设计决策时 → `architect/` 桶，Decision Log 格式
-2. 发现或确认约束时 → 对应桶
-3. 需求讨论达成结论时 → `pm/` 桶
-4. 建立代码约定时 → `dev/` 桶
-5. 修改文件结构时 → 标记 `catalog_dirty = true`
-6. 往基础文件新增话题段落时 → 同步注册到 topics.md
+- 供 LLM 会话长期复用的高价值信息
+- 不应再通过 `.memory/` 文件直写
+
+规则：
+
+1. 首次 durable memory 操作前先 `read_memory("system://boot")`
+2. 更新已有 durable memory 前先 `read_memory(uri)` 或 `search_memory`
+3. 新增长期记忆只允许 `propose_memory`
+4. 更新长期记忆只允许 `propose_memory_update`
+5. 审查只允许 `memory-hub review ...`
+6. 回滚只允许 `memory-hub rollback ...`
+7. 禁止直接写 `.memoryhub/`、SQLite、导出文件
+
+### Durable Memory 价值门槛
+
+只有满足下面两个条件的信息才应进入 durable memory：
+
+1. `why_not_in_code`
+   - 为什么这条信息不能通过读代码得到
+2. `source_reason`
+   - 这条信息来自哪里，为什么可信
+
+若无法清晰回答，不应写入 durable memory。
+
+### Durable Memory 类型约束
+
+只允许四种类型：
+
+- `identity`
+- `decision`
+- `constraint`
+- `preference`
+
+### Durable Memory 禁止事项
+
+- 不要直接编辑 `.memoryhub/`
+- 不要直接操作 `memory.db`
+- 不要把 `.memory/` 文件写入当成 durable memory
+- 不要绕过 review 直接把 proposal 变成 approved
+- 不要用 full replace 更新 durable memory
 
 ## 任务结束时
 
-- 若 `catalog_dirty = true` → 执行 `catalog.update`
-- 若本次发生过 `memory.index` 或 `catalog.update` → 执行 `catalog.repair`：
-  - `ai_actions` 非空 → 立即自愈，再次 repair 确认清零
-  - `manual_actions` 非空 → 向用户报告
-
-## 决策演进格式
-
-不删除旧决策，追加新决策并标注废弃关系：
-
-```markdown
-### 决策 N — <日期>
-背景：<问题>
-方案：
-- A: <描述> ← 选择
-- B: <描述>
-选择原因：<为什么>
-废弃：决策 M 的方案 X 不再使用（如适用）
-```
-
-## 文件管理
-
-1. 先 `catalog.read topics` 看话题是否已有知识文件
-2. 有 → 直接编辑 `.memory/` 下的文件，然后 `memory-hub index` 更新索引
-3. 没有 → 直接创建文件，然后 `memory-hub index` 注册
+- 若本次改动了 `.memory/` 或 catalog：执行 `catalog.repair`
+- 若本次改动了 durable memory 实现：至少跑相关 pytest
+- 若本次改动影响 MCP/CLI 契约：同步更新 `README.md` 与相关 skill

@@ -15,16 +15,20 @@ from typing import Any
 
 
 def ok(data: dict[str, Any] | None = None, *,
+       code: str = "SUCCESS",
+       message: str | None = None,
        ai_actions: list[dict[str, Any]] | None = None,
        manual_actions: list[dict[str, Any]] | None = None) -> None:
     """Print success envelope and exit 0."""
     payload = {
         "ok": True,
-        "code": "SUCCESS",
+        "code": code,
         "data": data or {},
         "ai_actions": ai_actions or [],
         "manual_actions": manual_actions or [],
     }
+    if message is not None:
+        payload["message"] = message
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     sys.exit(0)
 

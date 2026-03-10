@@ -15,6 +15,8 @@ COMMANDS = {
     "catalog-read": "lib.catalog_read",
     "catalog-update": "lib.catalog_update",
     "catalog-repair": "lib.catalog_repair",
+    "review": "lib.review_cli",
+    "rollback": "lib.rollback_cli",
 }
 
 

@@ -29,34 +29,30 @@ If `ALREADY_INITIALIZED` error, stop and inform the user.
 3. Read entry files (`main.*`, `index.*`, `app.*`, `server.*`, etc.)
 4. Read config files (`.env.example`, `tsconfig.json`, `webpack.config.*`, etc.)
 
-Generate `tech-stack.md` content and write:
+Generate `tech-stack.md` content, write it to `.memory/architect/tech-stack.md`, then register it:
 
 ```bash
-memory-hub write architect tech-stack.md \
-  --topic tech-stack --summary "技术栈、关键依赖、使用方式与限制" --mode overwrite <<'EOF'
-<generated markdown>
-EOF
+memory-hub index architect tech-stack.md \
+  --topic tech-stack --summary "技术栈、关键依赖、使用方式与限制"
 ```
 
 ### Step 3: Generate code conventions knowledge
 
-Based on project structure from Step 2, generate `conventions.md`:
+Based on project structure from Step 2, generate `conventions.md`, write it to `.memory/dev/conventions.md`, then register it:
 
 ```bash
-memory-hub write dev conventions.md \
-  --topic conventions --summary "目录命名规则、模块组织方式、代码约定" --mode overwrite <<'EOF'
-<generated markdown>
-EOF
+memory-hub index dev conventions.md \
+  --topic conventions --summary "目录命名规则、模块组织方式、代码约定"
 ```
 
 ### Step 4: Scan project modules and generate Catalog
 
 Analyze directory structure, identify functional domains and key files, construct JSON:
 
+Write the JSON to a temporary file, then run:
+
 ```bash
-memory-hub catalog-update <<'EOF'
-{"modules": [{"name": "...", "summary": "...", "files": [{"path": "...", "description": "..."}]}]}
-EOF
+memory-hub catalog-update --file /tmp/modules.json
 ```
 
 ### Step 5: Quality gate
