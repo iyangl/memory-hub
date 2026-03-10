@@ -1,324 +1,88 @@
+codex
 
-› 从这条消息开始，把 durable memory 当作本次会话的正式工作流来使用。先按仓库规则加载会话启动所需的 durable memory，再继续
-  后续判断。现在先不要改代码，也不要做 review，只做你认为必须的 durable memory 初始化读取。
+╭─────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.113.0)                  │
+│                                             │
+│ model:     gpt-5.4 xhigh   /model to change │
+│ directory: ~/Documents/Code/memory-hub      │
+╰─────────────────────────────────────────────╯
+
+  Tip: New Try the Codex App with 2x rate limits until April 2nd. Run 'codex app' or visit
+  https://chatgpt.com/codex?app-landing-page=true
 
 
-• 按仓库的 durable memory 工作流，启动阶段只做 read_memory("system://boot")。我先加载 boot memory，不做代码修改，也不继续设
-  计判断。
+› 请把下面这条补充信息更新到已有 durable memory `constraint://freeze-durable-memory-external-contract-before-
+  implementation`：
+
+  在冻结 durable memory 外部契约之后，应该先落 schema 和契约测试，再开始主实现。
+
+  这是一条对现有约束的补充，不要创建新 memory，不要直接写文件，请按 durable-memory workflow 处理。
+
+
+• 这次任务是对现有 durable memory 做补充更新，我会先读取 durable-memory skill 和目标 memory，确认它是已批准条目并按该
+  workflow 走提案更新，而不是新建 memory。
+
+• Explored
+  └ Read SKILL.md
+
+• Called memory-hub.read_memory({"uri":"constraint://freeze-durable-memory-external-contract-before-implementation"})
+  └ {"ok": true, "code": "MEMORY_READ", "message": "Memory loaded.", "data": {"uri":
+        "constraint://freeze-durable-memory-external-contract-before-implementation", "type": "constraint", "title": "Free
+        ze durable memory external contract before implementation", "content": "为了避免文档、技能和实现再次漂移，durable
+        memory 的外部契约必须先于实现冻结。应先明确并固定不变量、URI 规则、状态机、MCP/CLI 返回结构与错误语义，再按该契约
+        推进 schema、服务层、协议层和测试实现。", "recall_when": "当规划 durable memory 新功能、调整 MCP/CLI 接口、设计 sc
+        hema、讨论工作流边界，或准备先实现后补文档时回忆。", "current_version_id": 2, "updated_at": "2026-03-10T08:41:08Z"
+        }, "degraded": false, "degrade_reasons": []}
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• 我已经确认目标 URI 是已批准的 constraint memory。接下来补读 boot memory，然后对现有条目发起增量更新提案，避免做整段替换。
 
 • Called memory-hub.read_memory({"uri":"system://boot"})
-  └ {"ok": true, "code": "MEMORY_READ", "message": "Boot memory loaded.", "data": {"uri": "system://boot", "items": []}, "
-        degraded": false, "degrade_reasons": []}
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 已完成 durable memory 启动读取。
-
-  read_memory("system://boot") 返回成功，当前 boot memory 为空，items = []。这意味着本次会话没有需要在启动时注入的 durable
-  memory 约束或身份记忆。未做代码修改，未继续 review。
-
-
-› 这是一个应该被后续会话长期复用的信息：本项目决定 durable memory 的实现优先保持零运行时依赖，MCP 层只接受最小 stdio JSON-
-  RPC，不引入第三方 Python MCP SDK。请按 durable memory 工作流处理它，不要直接写文件，也不要做人工 review。
-
-
-• 我先按 durable memory 的提交流程把这条信息作为长期记忆提案提交，不写文件，不做人工 review。
+  └ {"ok": true, "code": "MEMORY_READ", "message": "Boot memory loaded.", "data": {"uri": "system://boot", "items": [{"uri
+        ": "constraint://durable-memory-requires-proposal-and-human-review", "type": "constraint", "title": "Durable memory
+        requires proposal and human review", "content": "durable memory 不允许直写，必须经过 `propose -> review -> approve
+        /reject` 工作流。长期记忆的生效必须由人工通过审查流程确认，不能跳过 proposal，也不能绕过 review 直接写入 approved
+        memory。", "content_hash": "75cc60f58e98e4e74d31c749809fc63382b7f484478f5b2631baa47ff5efe714", "recall_when": "当
+        准备写入 durable memory、设计长期记忆工作流、评估是否可以直接落库，或判断 LLM 是否可以跳过审查直接生效时回...
 
 • Called
-  └ memory-hub.propose_memory({"type":"decision","title":"Zero-dependency durable memory MCP surface","content":"项目决定
-        durable memory 的实现优先保持零运行时依赖。MCP 层只接受最小 stdio JSON-RPC 方案，不引入第三方 Python MCP SDK。后续
-        若扩展协议层，也应优先复用现有 handler/契约，而不是先引入外部 SDK。","recall_when":"当修改 durable memory 实现、MCP
-        协议层、依赖策略或评估是否引入第三方 Python MCP SDK 时回忆。","why_not_in_code":"这是跨模块的架构约束与取舍理由，不
-        能仅从当前代码实现稳定推断；未来即使代码局部变化，这条决策仍需要保留。","source_reason":"用户在本次会话中明确声明这
-        是一条应被后续会话长期复用的项目决策。"})
-    {"ok": true, "code": "PROPOSAL_CREATED", "message": "Proposal created.", "data": {"code": "PROPOSAL_CREATED", "proposa
-        l_id": 1, "proposal_kind": "create", "status": "pending", "target_uri":
-        "decision://zero-dependency-durable-memory-mcp-surface", "guard_decision": "PENDING_REVIEW"}, "degraded": false, "
-        degrade_reasons": []}
+  └ memory-hub.propose_memory_update({"uri":"constraint://freeze-durable-memory-external-contract-before-
+        implementation","old_string":"应先明确并固定不变量、URI 规则、状态机、MCP/CLI 返回结构与错误语义，再按该契约推进
+        schema、服务层、协议层和测试实现。","new_string":"应先明确并固定不变量、URI 规则、状态机、MCP/CLI 返回结构与错误语
+        义；冻结外部契约后，先落 schema 和契约测试，再开始主实现，并按该契约推进服务层与协议层实现。","source_reason":"用户
+        在当前会话中明确补充该约束：冻结 durable memory 外部契约之后，应先完成 schema 与契约测试，再开始主实现；这属于跨会
+        话仍需遵守的实现顺序约束。","why_not_in_code":"这是 durable memory 工作流层面的实施顺序约束，无法从单次代码状态稳定
+        反推出，且未来在设计与实现阶段需要提前回忆。","recall_when":"当规划 durable memory 新功能、调整 MCP/CLI 接口、设计
+        schema、讨论工作流边界，或准备先实现后补文档时回忆。"})
+    {"ok": true, "code": "PROPOSAL_CREATED", "message": "Update proposal created.", "data": {"code": "PROPOSAL_CREATED", "
+        proposal_id": 5, "proposal_kind": "update", "target_uri":
+        "constraint://freeze-durable-memory-external-contract-before-implementation", "base_version_id": 2, "status": "pen
+        ding"}, "degraded": false, "degrade_reasons": []}
 
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-• 已按 durable memory 工作流提交为提案，未直接写文件，未做人工 review。
+• 已按 durable-memory workflow 处理：先读取了现有 approved memory 和 boot memory，然后对既有 memory
+  constraint://freeze-durable-memory-external-contract-before-implementation 发起了增量更新提案，没有创建新 memory，也没有
+  直接写文件。
 
-  结果：
+  当前结果是提案 #5，状态为 pending，尚未批准生效。提案内容把原约束补充为：冻结 durable memory 外部契约后，必须先落 schema
+  和契约测试，再开始主实现，之后再按该契约推进服务层与协议层实现。
 
-  - proposal_id: 1
-  - status: pending
-  - target_uri: decision://zero-dependency-durable-memory-mcp-surface
 
-  这条信息当前处于待审状态，还不是 approved memory。
+› 请把下面这条补充信息加入还在 review 队列中的 durable memory proposal `decision://separate-memory-and-memoryhub-
+  surfaces`：
 
+  `.memory/` 继续承担项目知识与 catalog，`.memoryhub/` 只承担 durable memory proposal/review/rollback 控制面。
 
-› 我怀疑仓库里已经有一条关于“双 surface：.memory 与 .memoryhub 分层”的长期记忆。请先按 durable memory 工作流检查是否已有相
-  关 memory；如果已有则基于现有内容提出更新，如果没有再提出新 memory。不要直接写任何文件。
+  请按正确 workflow 处理，但不要替我审批。
 
 
-• 我先只走 durable memory 检索链路：先查 approved memories 里有没有和 .memory / .memoryhub 双 surface 分层相关的记录；如果
-  命中，再读取并基于现有内容提更新，否则再创建新提案。
+• 这次要处理的是指向 review 队列中 pending proposal 的补充信息。我会先按 durable-memory workflow 检查队列和该 proposal 的状
+  态，确认是否命中“pending proposal 只能停在人审分叉”的分支。
 
-• Called memory-hub.search_memory({"query":"memoryhub","type":"decision","limit":10})
-  └ {"ok": true, "code": "SEARCH_OK", "message": "Search completed.", "data": {"query": "memoryhub", "results": []},
-        "degraded": false, "degrade_reasons": []}
-
-• Called memory-hub.search_memory({"query":".memory","type":"decision","limit":10})
-  └ {"ok": true, "code": "SEARCH_OK", "message": "Search completed.", "data": {"query": ".memory", "results": []},
-        "degraded": false, "degrade_reasons": []}
-
-• Called memory-hub.search_memory({"query":"surface","type":"decision","limit":10})
-  └ {"ok": true, "code": "SEARCH_OK", "message": "Search completed.", "data": {"query": "surface", "results": []},
-        "degraded": false, "degrade_reasons": []}
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 目前在 approved decision memories 里没搜到直接命中。我再补两次宽一点的检索，避免漏掉被记成别的类型或中文内容的现有
-  memory。
-
-• Called memory-hub.search_memory({"query":"项目知识","limit":10})
-  └ {"ok": true, "code": "SEARCH_OK", "message": "Search completed.", "data": {"query": "项目知识", "results": []},
-        "degraded": false, "degrade_reasons": []}
-
-• Called memory-hub.search_memory({"query":"长期记忆","limit":10})
-  └ {"ok": true, "code": "SEARCH_OK", "message": "Search completed.", "data": {"query": "长期记忆", "results": []},
-        "degraded": false, "degrade_reasons": []}
-
-• Called memory-hub.search_memory({"query":"LLM","limit":10})
-  └ {"ok": true, "code": "SEARCH_OK", "message": "Search completed.", "data": {"query": "LLM", "results": []}, "degraded":
-        false, "degrade_reasons": []}
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 补充检索也没有命中相关 approved memory。我现在按“无现有 memory”分支提交一条新的 durable memory 提案。
-
-• Called
-  └ memory-hub.propose_memory({"type":"decision","title":"Separate .memory and .memoryhub surfaces","content":"本项目长期保
-        持双 surface 分层：`.memory/` 负责项目知识文件与 catalog 索引；`.memoryhub/` 负责 durable memory 控制面，通过 MCP
-        `propose/read/search` 与 CLI `review/rollback` 工作流维护。不得用 `.memory/` 文件型命令替代 durable memory
-        proposal，也不要把 durable memory 的审查语义混入 `.memory/` 工作流。","recall_when":"当决定应该把信息写到哪里、编写
-        或修改 memory-hub skills、更新 README/CLAUDE、接入 MCP 客户端，或判断 `.memory/` 与 `.memoryhub/` 命令边界时回
-        忆。","why_not_in_code":"这是跨两套存储面和两类工作流的边界约束，不能仅从单个模块实现稳定推断；后续即使内部实现调
-        整，这个分层原则仍需保持。","source_reason":"本次会话先检索了 approved durable memories，未发现关于 `.memory/` 与
-        `.memoryhub/` 双 surface 分层的现有 memory；基于仓库已确立的工作流边界与用户要求，提交为新的长期决策记忆。"})
-    {"ok": true, "code": "PROPOSAL_CREATED", "message": "Proposal created.", "data": {"code": "PROPOSAL_CREATED", "proposa
-        l_id": 2, "proposal_kind": "create", "status": "pending", "target_uri":
-        "decision://separate-memory-and-memoryhub-surfaces", "guard_decision": "PENDING_REVIEW"}, "degraded": false, "degr
-        ade_reasons": []}
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 已按 durable memory 工作流处理。
-
-  先做了 approved memory 检索，查询了 memoryhub、.memory、surface、项目知识、长期记忆、LLM，都没有命中相关现有 memory，因此
-  没有走 update 分支。
-
-  随后已提交新的 durable memory 提案：
-
-  - proposal_id: 2
-  - status: pending
-  - target_uri: decision://separate-memory-and-memoryhub-surfaces
-
-  未直接写任何文件。
-
-
-› 请把下面这条新信息更新到已有 durable memory，而不是创建新条目：当前阶段 `.memory/` 仍保留为项目知识库，`.memoryhub/` 才
-  是 durable memory 控制面。你需要先找到目标 memory，再提出 update proposal。不要做 full replace。
-
-
-• 我先继续按 durable memory 检索链路扩大搜索范围，只查已批准的 memory，确认是否存在可更新的目标条目。若命中，我会先读取再提
-  交非 full-replace 的 update proposal。
-
-• Called memory-hub.search_memory({"query":"项目知识库","limit":10})
-  └ {"ok": true, "code": "SEARCH_OK", "message": "Search completed.", "data": {"query": "项目知识库", "results": []},
-        "degraded": false, "degrade_reasons": []}
-
-• Called memory-hub.search_memory({"query":"catalog 索引","limit":10})
-  └ {"ok": true, "code": "SEARCH_OK", "message": "Search completed.", "data": {"query": "catalog 索引", "results": []},
-        "degraded": false, "degrade_reasons": []}
-
-• Called memory-hub.search_memory({"query":"durable memory 控制面","limit":10})
-  └ {"ok": true, "code": "SEARCH_OK", "message": "Search completed.", "data": {"query": "durable memory 控制面", "results":
-        []}, "degraded": false, "degrade_reasons": []}
-
-• Called memory-hub.search_memory({"query":"review rollback","limit":10})
-  └ {"ok": true, "code": "SEARCH_OK", "message": "Search completed.", "data": {"query": "review rollback", "results": []},
-        "degraded": false, "degrade_reasons": []}
-
-• Called memory-hub.search_memory({"query":"proposal review","limit":10})
-  └ {"ok": true, "code": "SEARCH_OK", "message": "Search completed.", "data": {"query": "proposal review", "results": []},
-        "degraded": false, "degrade_reasons": []}
-
-• Called memory-hub.search_memory({"query":"memory-hub","limit":10})
-  └ {"ok": true, "code": "SEARCH_OK", "message": "Search completed.", "data": {"query": "memory-hub", "results": []},
-        "degraded": false, "degrade_reasons": []}
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• approved durable memories 里仍然没有命中目标。我补看一下当前 proposal 队列，确认是不是只有待审 create proposal 而没有可更
-  新的 approved memory；这一步不做人工 review，只核对状态。
-
-• Ran python3 -m lib.cli review list
-  └ {
-      "ok": true,
-    … +27 lines
-      "message": "Review queue loaded."
-    }
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 我已经定位到最接近的目标是待审 create proposal decision://separate-memory-and-memoryhub-surfaces，不是 approved memory。
-  按官方 update 流程我会用非 full-replace 的 append 方式尝试提交；如果目标不是 approved，错误会直接暴露出来。
-
-• Called
-  └ memory-hub.propose_memory_update({"uri":"decision://separate-memory-and-memoryhub-surfaces","append":"\n\n补充：当前阶
-        段 `.memory/` 仍保留为项目知识库；`.memoryhub/` 才是 durable memory 控制面。","source_reason":"用户要求将当前阶段的
-        分层状态补充到已有 durable memory，并明确要求不要创建新条目、不要做 full replace。"})
-    {"ok": false, "code": "MEMORY_NOT_FOUND", "message": "Approved memory not found:
-        decision://separate-memory-and-memoryhub-surfaces", "details": {}, "degraded": false, "degrade_reasons": []}
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 已按 durable memory 工作流检查并尝试更新，结果是当前不能提交 update proposal。
-
-  我先检索了 approved durable memories，围绕 .memory、.memoryhub、surface、项目知识库、durable memory 控制面 等关键词都没有
-  命中。随后核对了 proposal 队列，相关目标只有一个待审 create proposal：
-
-  - proposal_id: 2
-  - target_uri: decision://separate-memory-and-memoryhub-surfaces
-  - status: pending
-
-  我随后按“不要 full replace”的要求，用 append 方式对这个 URI 提交了 propose_memory_update，结果返回：
-
-  - code: MEMORY_NOT_FOUND
-  - message: Approved memory not found: decision://separate-memory-and-memoryhub-surfaces
-
-  这说明当前存在的是待审 proposal，不是 approved memory；官方 update 流程不能对它提交 update proposal。未直接写任何文件。
-
-
-› 请把这条补充信息以 append 的方式加入对应 durable memory：review 和 rollback 仍然只允许人工通过 CLI 完成，LLM 不应绕过审
-  查直接批准 proposal。先找到最相关的 memory，再按 durable memory 流程提出更新。
-
-
-■ Conversation interrupted - tell the model what to do differently. Something went wrong? Hit `/feedback` to report the
-issue.
-
-
-› 请把这条补充信息以 append 的方式加入对应 durable memory：review 和 rollback 仍然只允许人工通过 CLI 完成，LLM 不应绕过审
-  查直接批准 proposal。先找到最相关的 memory，再按 durable memory 流程提出更新。
-
-
-• 我先只做 durable memory 检索与队列核对，不做任何审批动作。目标是先定位最相关的现有 memory，再决定能否提交 append 型
-  update proposal。
-
-• Called memory-hub.search_memory({"query":"review","limit":10})
-  └ {"ok": true, "code": "SEARCH_OK", "message": "Search completed.", "data": {"query": "review", "results": []},
-        "degraded": false, "degrade_reasons": []}
-
-• Called memory-hub.search_memory({"query":"rollback","limit":10})
-  └ {"ok": true, "code": "SEARCH_OK", "message": "Search completed.", "data": {"query": "rollback", "results": []},
-        "degraded": false, "degrade_reasons": []}
-
-• Called memory-hub.search_memory({"query":"CLI","limit":10})
-  └ {"ok": true, "code": "SEARCH_OK", "message": "Search completed.", "data": {"query": "CLI", "results": []}, "degraded":
-        false, "degrade_reasons": []}
-
-• Called memory-hub.search_memory({"query":"审查","limit":10})
-  └ {"ok": true, "code": "SEARCH_OK", "message": "Search completed.", "data": {"query": "审查", "results": []}, "degraded":
-        false, "degrade_reasons": []}
-
-• Ran python3 -m lib.cli review list
-  └ {
-      "ok": true,
-    … +27 lines
-      "message": "Review queue loaded."
-    }
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 最相关的现有条目是 proposal_id: 2，target_uri: decision://separate-memory-and-memoryhub-surfaces。我现在按你要求用 append
-  方式提交 update proposal；如果目标还不是 approved memory，错误会直接暴露出来。
-
-• Called
-  └ memory-hub.propose_memory_update({"uri":"decision://separate-memory-and-memoryhub-surfaces","append":"\n\n补充：review
-        和 rollback 仍然只允许人工通过 CLI 完成，LLM 不应绕过审查直接批准 proposal。","source_reason":"用户要求将人工 CLI
-        审查与 rollback 约束以 append 方式补充到现有 durable memory，并明确要求先定位最相关 memory 再提交更新。"})
-    {"ok": false, "code": "MEMORY_NOT_FOUND", "message": "Approved memory not found:
-        decision://separate-memory-and-memoryhub-surfaces", "details": {}, "degraded": false, "degrade_reasons": []}
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 已按 durable memory 流程执行到“找目标并尝试 append 更新”这一步。
-
-  结果是：
-
-  - approved durable memories 检索 review、rollback、CLI、审查 都没有命中
-  - 当前最相关的现有条目是待审 create proposal：
-      - proposal_id: 2
-      - target_uri: decision://separate-memory-and-memoryhub-surfaces
-      - status: pending
-
-  我随后对这个 URI 提交了 append 型 propose_memory_update，返回：
-
-  - code: MEMORY_NOT_FOUND
-  - message: Approved memory not found: decision://separate-memory-and-memoryhub-surfaces
-
-  也就是说，最相关的现有条目目前还只是 pending proposal，不是 approved memory；官方 durable memory 更新流程不能对它追加
-  update proposal。未直接写任何文件。
-
-
-› 请把“durable memory 不允许直写，必须经过 propose -> review -> approve/reject”这条信息写入 durable memory。按正常 durable
-  memory 工作流处理，不要直接写文件。
-
-
-• 我先按 durable memory 的正常流程检查已批准记忆里是否已有这条审查规则；如果没有，再提交新的提案，不直接写文件。
-
-• Called memory-hub.search_memory({"query":"propose review","limit":10})
-  └ {"ok": true, "code": "SEARCH_OK", "message": "Search completed.", "data": {"query": "propose review", "results": []},
-        "degraded": false, "degrade_reasons": []}
-
-• Called memory-hub.search_memory({"query":"approve reject","limit":10})
-  └ {"ok": true, "code": "SEARCH_OK", "message": "Search completed.", "data": {"query": "approve reject", "results": []},
-        "degraded": false, "degrade_reasons": []}
-
-• Called memory-hub.search_memory({"query":"durable memory","limit":10})
-  └ {"ok": true, "code": "SEARCH_OK", "message": "Search completed.", "data": {"query": "durable memory", "results": []},
-        "degraded": false, "degrade_reasons": []}
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• approved durable memories 里没有命中这条规则。我现在按 create proposal 分支提交，不做人工 review。
-
-• Called
-  └ memory-hub.propose_memory({"type":"constraint","title":"Durable memory requires proposal and human
-        review","content":"durable memory 不允许直写，必须经过 `propose -> review -> approve/reject` 工作流。长期记忆的生效
-        必须由人工通过审查流程确认，不能跳过 proposal，也不能绕过 review 直接写入 approved memory。","recall_when":"当准备
-        写入 durable memory、设计长期记忆工作流、评估是否可以直接落库，或判断 LLM 是否可以跳过审查直接生效时回
-        忆。","why_not_in_code":"这是 durable memory 的流程约束和治理边界，属于跨模块工作流规则；不能仅从单个实现细节稳定推
-        断，后续实现演进时仍需被明确记住。","source_reason":"用户在本次会话中明确要求将这条 durable memory 审查规则写入长期
-        记忆，并要求按正式 durable memory 工作流处理。"})
-    {"ok": true, "code": "PROPOSAL_CREATED", "message": "Proposal created.", "data": {"code": "PROPOSAL_CREATED", "proposa
-        l_id": 3, "proposal_kind": "create", "status": "pending", "target_uri":
-        "constraint://durable-memory-requires-proposal-and-human-review", "guard_decision": "PENDING_REVIEW"}, "degraded":
-        false, "degrade_reasons": []}
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 已按 durable memory 工作流提交为新提案，未直接写文件。
-
-  结果：
-
-  - proposal_id: 3
-  - status: pending
-  - target_uri: constraint://durable-memory-requires-proposal-and-human-review
-
-  在提交前我检索了 approved durable memories，propose review、approve reject、durable memory 都没有命中现有 memory，因此走
-  了新建 proposal 分支。
-
-
-› 把这条长期记忆按 durable memory 流程提交 proposal。完成 proposal 后，不要替我批准，只告诉我应该用哪条 review CLI 命令继
-  续。
-
-
-• 我先核对 durable memory 队列，避免为同一条长期记忆重复创建 proposal。若已存在 pending proposal，就直接给你下一条 review
-  CLI 命令。
+• Explored
+  └ Read SKILL.md
 
 • Ran python3 -m lib.cli review list
   └ {
@@ -329,68 +93,33 @@ issue.
 
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-• 这条长期记忆的 proposal 已经存在，proposal_id 是 3，我没有重复创建。
+• 队列里已经确认 decision://separate-memory-and-memoryhub-surfaces 对应的是 pending 的 proposal #2。我再补看一次 approved
+  surface 和 proposal 详情，确认它不是已批准 memory，然后就停在人审分叉，不会替你做审批或改写 pending 项。
 
-  你如果要继续并手动批准，用这条 review CLI 命令：
+• Called memory-hub.read_memory({"uri":"decision://separate-memory-and-memoryhub-surfaces"})
+  └ {"ok": false, "code": "MEMORY_NOT_FOUND", "message": "Approved memory not found:
+        decision://separate-memory-and-memoryhub-surfaces", "details": {}, "degraded": false, "degrade_reasons": []}
 
-  memory-hub review approve 3 --note "reviewed and approved"
-
-  如果你想先看详情，再决定是否批准：
-
-  memory-hub review show 3
-
-
-› 刚刚在这个仓库里确认了一条重要的非代码约束：为了避免文档、技能和实现再次漂移，durable memory 的外部契约必须先于实现冻
-  结。这条信息后续会影响架构讨论和开发决策，请判断它是否值得进入 durable memory；如果值得，就按正确工作流处理。
-
-
-• 我先按 durable memory 的正常流程判断是否该沉淀：先查已批准的长期记忆里有没有同类约束，再核对待审队列，避免重复提案。
-
-• Called memory-hub.search_memory({"query":"契约","limit":10})
-  └ {"ok": true, "code": "SEARCH_OK", "message": "Search completed.", "data": {"query": "契约", "results": []}, "degraded":
-        false, "degrade_reasons": []}
-
-• Called memory-hub.search_memory({"query":"contract","limit":10})
-  └ {"ok": true, "code": "SEARCH_OK", "message": "Search completed.", "data": {"query": "contract", "results": []},
-        "degraded": false, "degrade_reasons": []}
-
-• Called memory-hub.search_memory({"query":"冻结","limit":10})
-  └ {"ok": true, "code": "SEARCH_OK", "message": "Search completed.", "data": {"query": "冻结", "results": []}, "degraded":
-        false, "degrade_reasons": []}
-
-• Ran python3 -m lib.cli review list
+• Ran python3 -m lib.cli review show 2
   └ {
       "ok": true,
-    … +37 lines
-      "message": "Review queue loaded."
+    … +33 lines
+      "message": "Proposal detail loaded."
     }
 
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-• 这条信息值得进入 durable memory：它是跨模块、非代码、会影响后续架构讨论和开发决策的治理约束，而且从当前已批准记忆和待审队
-  列里都没有同类条目。我现在按 create proposal 分支提交。
+• 已按正确 workflow 检查：decision://separate-memory-and-memoryhub-surfaces 当前没有 approved memory，对应的是 review 队列
+  里的 pending proposal #2。我还查看了 proposal 详情；它当前内容已经包含大部分你这次补充的意思：.memory/ 负责项目知识文件与
+  catalog，.memoryhub/ 负责 durable memory 控制面，并通过 MCP/CLI 工作流维护。
 
-• Called
-  └ memory-hub.propose_memory({"type":"constraint","title":"Freeze durable memory external contract before
-        implementation","content":"为了避免文档、技能和实现再次漂移，durable memory 的外部契约必须先于实现冻结。应先明确并
-        固定不变量、URI 规则、状态机、MCP/CLI 返回结构与错误语义，再按该契约推进 schema、服务层、协议层和测试实
-        现。","recall_when":"当规划 durable memory 新功能、调整 MCP/CLI 接口、设计 schema、讨论工作流边界，或准备先实现后补
-        文档时回忆。","why_not_in_code":"这是跨模块的工程治理约束和实施顺序原则，不会从某个具体实现文件中稳定显现；如果未来
-        会话没有先回忆这条规则，很容易再次做出先实现后补契约的错误决策。","source_reason":"用户在本次会话中明确确认这是一条
-        重要的非代码约束，并指出它会影响后续架构讨论和开发决策。"})
-    {"ok": true, "code": "PROPOSAL_CREATED", "message": "Proposal created.", "data": {"code": "PROPOSAL_CREATED", "proposa
-        l_id": 4, "proposal_kind": "create", "status": "pending", "target_uri":
-        "constraint://freeze-durable-memory-external-contract-before-implementation", "guard_decision": "PENDING_REVIEW"},
-        "degraded": false, "degrade_reasons": []}
+  这里不能直接把补充信息“加入到 pending proposal”里。按 durable-memory workflow 和仓库规则，pending proposal 命中人审分叉后
+  必须停住，不能由我替你 amend、merge、approve、reject 或 reopen。我因此没有调用任何更新 pending proposal 的操作。你如果要
+  继续人工处理，相关命令是：
 
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  python3 -m lib.cli review show 2
+  python3 -m lib.cli review approve 2 --reviewer <id> --note "<text>"
+  python3 -m lib.cli review reject 2 --reviewer <id> --note "<text>"
 
-• 值得，已经按 durable memory 工作流提交为 proposal，未直接写文件，也未替你审批。
-
-  结果：
-
-  - proposal_id: 4
-  - status: pending
-  - target_uri: constraint://freeze-durable-memory-external-contract-before-implementation
-
-  我在提交前检查了 approved durable memories 和当前 review 队列，没有发现同类已批准或待审条目。
+  如果这条 proposal 先被批准，后续就可以针对已批准的 decision://separate-memory-and-memoryhub-surfaces 再提交一个 update p
+  roposal，把你这句“.memoryhub/ 只承担 durable memory proposal/review/rollback 控制面`”正式补进去。

@@ -49,16 +49,21 @@
 
 - 供 LLM 会话长期复用的高价值信息
 - 不应再通过 `.memory/` 文件直写
+- 普通代码审查或一次性讨论不默认进入此工作流
 
 规则：
 
-1. 首次 durable memory 操作前先 `read_memory("system://boot")`
-2. 更新已有 durable memory 前先 `read_memory(uri)` 或 `search_memory`
-3. 新增长期记忆只允许 `propose_memory`
-4. 更新长期记忆只允许 `propose_memory_update`
-5. 审查只允许 `memory-hub review ...`
-6. 回滚只允许 `memory-hub rollback ...`
-7. 禁止直接写 `.memoryhub/`、SQLite、导出文件
+1. 一旦识别到 durable-memory 语境，立即进入 `durable-memory` skill
+2. 一旦进入 durable-memory workflow，本会话第一条 durable-memory 工具调用必须是 `read_memory("system://boot")`
+3. 由 skill 决定是否检索现有 memory、创建 proposal 或更新 proposal
+4. proposal 创建成功后，skill 必须自动执行 `review show <proposal_id>`，展示摘要和 diff，再进入确认分流
+5. 如果最相关目标是 pending proposal，skill 必须先 `review show <proposal_id>`，再进入人工审查分流
+6. 宿主若提供结构化确认工具则优先使用；否则退化为固定文本分叉：`批准此提案` / `拒绝此提案` / `暂不处理`
+7. 只有在展示 proposal 详情后且用户明确选择 `批准此提案` 或 `拒绝此提案` 时，LLM 才可代理执行对应的 CLI 审查命令
+8. durable memory 只接受 `identity / decision / constraint / preference`
+9. 禁止直接写 `.memoryhub/`、SQLite、导出文件
+10. 禁止 LLM 自行 rollback durable memory
+11. 禁止对 pending proposal 继续 update、amend、merge、reopen
 
 ### Durable Memory 价值门槛
 
@@ -85,8 +90,11 @@
 - 不要直接编辑 `.memoryhub/`
 - 不要直接操作 `memory.db`
 - 不要把 `.memory/` 文件写入当成 durable memory
-- 不要绕过 review 直接把 proposal 变成 approved
+- 不要在展示 proposal 详情和拿到明确确认前执行 `review approve/reject`
+- 不要对 pending proposal 继续提交 update proposal
+- 不要对 pending proposal 执行 amend、merge 或 reopen
 - 不要用 full replace 更新 durable memory
+- 不要代理执行 `rollback`
 
 ## 任务结束时
 
