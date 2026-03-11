@@ -14,7 +14,7 @@ def initialized_project(tmp_path):
     root = tmp_path / ".memory"
     for bucket, files in paths.BASE_FILES.items():
         for f in files:
-            fp = root / bucket / f
+            fp = root / "docs" / bucket / f
             fp.parent.mkdir(parents=True, exist_ok=True)
             fp.write_text("", encoding="utf-8")
     catalog = root / "catalog"
@@ -39,7 +39,7 @@ def run_index(args):
 class TestIndex:
     def test_index_updates_topics(self, initialized_project):
         # AI writes the file directly first
-        fp = initialized_project / ".memory" / "architect" / "tech-stack.md"
+        fp = initialized_project / ".memory" / "docs" / "architect" / "tech-stack.md"
         fp.write_text("## Tech Stack\n\n- Python\n", encoding="utf-8")
 
         result, code = run_index(
@@ -70,7 +70,7 @@ class TestIndex:
         assert result["code"] == "INVALID_BUCKET"
 
     def test_index_with_anchor(self, initialized_project):
-        fp = initialized_project / ".memory" / "dev" / "conventions.md"
+        fp = initialized_project / ".memory" / "docs" / "dev" / "conventions.md"
         fp.write_text("## Naming\n\nsnake_case\n", encoding="utf-8")
 
         result, code = run_index(
@@ -84,7 +84,7 @@ class TestIndex:
 
     def test_index_creates_new_file_entry(self, initialized_project):
         # Create a new knowledge file
-        fp = initialized_project / ".memory" / "architect" / "caching.md"
+        fp = initialized_project / ".memory" / "docs" / "architect" / "caching.md"
         fp.parent.mkdir(parents=True, exist_ok=True)
         fp.write_text("## Caching\n\nRedis\n", encoding="utf-8")
 
@@ -99,7 +99,7 @@ class TestIndex:
         assert "缓存策略" in topics
 
     def test_index_updates_existing_entry(self, initialized_project):
-        fp = initialized_project / ".memory" / "architect" / "tech-stack.md"
+        fp = initialized_project / ".memory" / "docs" / "architect" / "tech-stack.md"
         fp.write_text("## Tech\n", encoding="utf-8")
 
         # Index once
@@ -118,4 +118,4 @@ class TestIndex:
         topics = (initialized_project / ".memory" / "catalog" / "topics.md").read_text(encoding="utf-8")
         assert "新描述" in topics
         # Old summary should be replaced, not duplicated
-        assert topics.count("architect/tech-stack.md") == 1
+        assert topics.count("docs/architect/tech-stack.md") == 1

@@ -17,6 +17,7 @@ COMMANDS = {
     "catalog-repair": "lib.catalog_repair",
     "review": "lib.review_cli",
     "rollback": "lib.rollback_cli",
+    "session-extract": "lib.session_extract_cli",
 }
 
 

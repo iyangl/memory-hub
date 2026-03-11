@@ -11,7 +11,7 @@ from typing import Any, Iterator
 
 from lib import paths
 
-SCHEMA_VERSION = "0001_phase1a"
+SCHEMA_VERSION = "0003_phase2d"
 SCHEMA_CHECKSUM = hashlib.sha256(SCHEMA_VERSION.encode("utf-8")).hexdigest()
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS memory_versions (
     uri TEXT NOT NULL,
     version_number INTEGER NOT NULL,
     type TEXT NOT NULL CHECK (type IN ('identity','decision','constraint','preference')),
+    storage_lane TEXT NOT NULL DEFAULT 'durable' CHECK (storage_lane IN ('durable','dual')),
+    doc_ref TEXT,
     title TEXT NOT NULL,
     content TEXT NOT NULL,
     content_hash TEXT NOT NULL,
@@ -39,6 +41,8 @@ CREATE TABLE IF NOT EXISTS memory_versions (
 CREATE TABLE IF NOT EXISTS approved_memories (
     uri TEXT PRIMARY KEY,
     type TEXT NOT NULL CHECK (type IN ('identity','decision','constraint','preference')),
+    storage_lane TEXT NOT NULL DEFAULT 'durable' CHECK (storage_lane IN ('durable','dual')),
+    doc_ref TEXT,
     title TEXT NOT NULL,
     content TEXT NOT NULL,
     content_hash TEXT NOT NULL,
@@ -56,6 +60,8 @@ CREATE TABLE IF NOT EXISTS memory_proposals (
     target_uri TEXT NOT NULL,
     base_version_id INTEGER REFERENCES memory_versions(version_id),
     type TEXT NOT NULL CHECK (type IN ('identity','decision','constraint','preference')),
+    storage_lane TEXT NOT NULL DEFAULT 'durable' CHECK (storage_lane IN ('durable','dual')),
+    doc_ref TEXT,
     title TEXT NOT NULL,
     content TEXT NOT NULL,
     content_hash TEXT NOT NULL,
@@ -104,7 +110,97 @@ CREATE INDEX IF NOT EXISTS idx_audit_events_uri_created_at
     ON audit_events(uri, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_events_proposal_id
     ON audit_events(proposal_id);
+CREATE TABLE IF NOT EXISTS docs_change_reviews (
+    review_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    status TEXT NOT NULL CHECK (status IN ('pending','approved','rejected')),
+    doc_ref TEXT NOT NULL,
+    title TEXT NOT NULL,
+    before_content TEXT NOT NULL DEFAULT '',
+    after_content TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    linked_proposal_id INTEGER REFERENCES memory_proposals(proposal_id),
+    created_at TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    reviewed_at TEXT,
+    reviewed_by TEXT,
+    review_note TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pending_docs_change_ref
+    ON docs_change_reviews(doc_ref)
+    WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS idx_docs_change_reviews_status_created_at
+    ON docs_change_reviews(status, created_at ASC);
 """
+
+
+def _table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
+    rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+    return {str(row["name"]) for row in rows}
+
+
+def _ensure_column(conn: sqlite3.Connection, table_name: str, column_name: str, definition: str) -> None:
+    if column_name in _table_columns(conn, table_name):
+        return
+    conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {definition}")
+
+
+def _ensure_phase2c_schema(conn: sqlite3.Connection) -> None:
+    _ensure_column(
+        conn,
+        "memory_versions",
+        "storage_lane",
+        "storage_lane TEXT NOT NULL DEFAULT 'durable' CHECK (storage_lane IN ('durable','dual'))",
+    )
+    _ensure_column(conn, "memory_versions", "doc_ref", "doc_ref TEXT")
+    _ensure_column(
+        conn,
+        "approved_memories",
+        "storage_lane",
+        "storage_lane TEXT NOT NULL DEFAULT 'durable' CHECK (storage_lane IN ('durable','dual'))",
+    )
+    _ensure_column(conn, "approved_memories", "doc_ref", "doc_ref TEXT")
+    _ensure_column(
+        conn,
+        "memory_proposals",
+        "storage_lane",
+        "storage_lane TEXT NOT NULL DEFAULT 'durable' CHECK (storage_lane IN ('durable','dual'))",
+    )
+    _ensure_column(conn, "memory_proposals", "doc_ref", "doc_ref TEXT")
+    conn.executescript(
+        """
+        CREATE INDEX IF NOT EXISTS idx_approved_memories_doc_ref
+            ON approved_memories(doc_ref);
+        CREATE INDEX IF NOT EXISTS idx_memory_proposals_doc_ref_status
+            ON memory_proposals(doc_ref, status);
+        """
+    )
+
+
+def _ensure_phase2d_schema(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS docs_change_reviews (
+            review_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            status TEXT NOT NULL CHECK (status IN ('pending','approved','rejected')),
+            doc_ref TEXT NOT NULL,
+            title TEXT NOT NULL,
+            before_content TEXT NOT NULL DEFAULT '',
+            after_content TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            linked_proposal_id INTEGER REFERENCES memory_proposals(proposal_id),
+            created_at TEXT NOT NULL,
+            created_by TEXT NOT NULL,
+            reviewed_at TEXT,
+            reviewed_by TEXT,
+            review_note TEXT
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_pending_docs_change_ref
+            ON docs_change_reviews(doc_ref)
+            WHERE status = 'pending';
+        CREATE INDEX IF NOT EXISTS idx_docs_change_reviews_status_created_at
+            ON docs_change_reviews(status, created_at ASC);
+        """
+    )
 
 
 def utc_now() -> str:
@@ -119,7 +215,7 @@ def hash_text(text: str) -> str:
 
 def connect(project_root: Path | None = None) -> sqlite3.Connection:
     """Open a durable memory SQLite connection."""
-    db_path = paths.memoryhub_db_path(project_root)
+    db_path = paths.store_db_path(project_root)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path, isolation_level=None)
     conn.row_factory = sqlite3.Row
@@ -129,9 +225,11 @@ def connect(project_root: Path | None = None) -> sqlite3.Connection:
 
 def ensure_schema(project_root: Path | None = None) -> Path:
     """Ensure database and schema exist."""
-    db_path = paths.memoryhub_db_path(project_root)
+    db_path = paths.store_db_path(project_root)
     with connect(project_root) as conn:
         conn.executescript(SCHEMA_SQL)
+        _ensure_phase2c_schema(conn)
+        _ensure_phase2d_schema(conn)
         row = conn.execute(
             "SELECT version FROM schema_migrations WHERE version = ?",
             (SCHEMA_VERSION,),

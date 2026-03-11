@@ -33,11 +33,11 @@ def run(args: list[str]) -> None:
 
     results = []
     for bucket in paths.BUCKETS:
-        bp = root / bucket
+        bp = paths.bucket_path(bucket, project_root)
         if not bp.exists():
             continue
         for md_file in sorted(bp.rglob("*.md")):
-            rel = f"{bucket}/{md_file.name}"
+            rel = paths.docs_file_ref(bucket, md_file.name)
             try:
                 lines = md_file.read_text(encoding="utf-8").splitlines()
             except Exception:

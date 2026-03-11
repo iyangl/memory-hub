@@ -9,6 +9,7 @@ from io import StringIO
 import pytest
 
 from lib.durable_repo import insert_create_proposal, insert_update_proposal
+from lib.project_memory_write import capture_memory, update_memory
 from tests.durable_test_support import bootstrap_project, fetch_one, seed_approved_memory
 
 
@@ -62,6 +63,23 @@ def test_review_list_returns_pending_items(tmp_path):
     assert code == 0
     assert result["code"] == "REVIEW_QUEUE_OK"
     assert len(result["data"]["items"]) == 2
+
+
+def test_review_list_includes_pending_docs_reviews(tmp_path):
+    project_root = bootstrap_project(tmp_path)
+    capture_memory(
+        project_root,
+        kind="docs",
+        title="Docs Review Item",
+        content="Docs review entry.",
+        reason="docs queue",
+        doc_domain="pm",
+    )
+
+    result, code = run_cli(["review", "list", "--project-root", str(project_root)])
+
+    assert code == 0
+    assert any(item["review_kind"] == "docs_change_review" for item in result["data"]["items"])
 
 
 def test_review_show_create_proposal_returns_empty_baseline_diff(tmp_path):
@@ -120,6 +138,24 @@ def test_review_show_missing_proposal_returns_business_error(tmp_path):
     assert result["code"] == "PROPOSAL_NOT_FOUND"
 
 
+def test_review_show_doc_ref_returns_docs_change_review(tmp_path):
+    project_root = bootstrap_project(tmp_path)
+    capture_memory(
+        project_root,
+        kind="docs",
+        title="Docs Show",
+        content="Show the docs diff.",
+        reason="show docs review",
+        doc_domain="pm",
+    )
+
+    result, code = run_cli(["review", "show", "doc://pm/docs-show", "--project-root", str(project_root)])
+
+    assert code == 0
+    assert result["data"]["review_kind"] == "docs_change_review"
+    assert "+Show the docs diff." in result["data"]["computed_diff"]
+
+
 def test_review_approve_success_and_duplicate_approve_error(tmp_path):
     project_root = bootstrap_project(tmp_path)
     proposal = insert_create_proposal(
@@ -144,6 +180,26 @@ def test_review_approve_success_and_duplicate_approve_error(tmp_path):
     assert success["code"] == "PROPOSAL_APPROVED"
     assert duplicate_code == 1
     assert duplicate["code"] == "PROPOSAL_NOT_PENDING"
+
+
+def test_review_approve_doc_ref_applies_file_and_catalog(tmp_path):
+    project_root = bootstrap_project(tmp_path)
+    capture_memory(
+        project_root,
+        kind="docs",
+        title="Approve Docs",
+        content="Apply this docs review.",
+        reason="approve docs review",
+        doc_domain="pm",
+    )
+
+    result, code = run_cli(["review", "approve", "doc://pm/approve-docs", "--project-root", str(project_root)])
+    doc_file = project_root / ".memory" / "docs" / "pm" / "approve-docs.md"
+
+    assert code == 0
+    assert result["code"] == "PROPOSAL_APPROVED"
+    assert doc_file.exists()
+    assert "Apply this docs review." in doc_file.read_text(encoding="utf-8")
 
 
 def test_review_reject_requires_note(tmp_path):
@@ -200,6 +256,41 @@ def test_review_reject_success(tmp_path):
     assert proposal_row is not None
     assert proposal_row["status"] == "rejected"
     assert proposal_row["review_note"] == "not accepted"
+
+
+def test_review_reject_doc_ref_updates_docs_review_status(tmp_path):
+    project_root = bootstrap_project(tmp_path)
+    capture_memory(
+        project_root,
+        kind="docs",
+        title="Reject Docs",
+        content="Reject this docs review.",
+        reason="reject docs review",
+        doc_domain="pm",
+    )
+
+    result, code = run_cli(
+        [
+            "review",
+            "reject",
+            "doc://pm/reject-docs",
+            "--note",
+            "reject docs",
+            "--project-root",
+            str(project_root),
+        ]
+    )
+    review_row = fetch_one(
+        project_root,
+        "SELECT status, review_note FROM docs_change_reviews WHERE doc_ref = ?",
+        ("doc://pm/reject-docs",),
+    )
+
+    assert code == 0
+    assert result["code"] == "PROPOSAL_REJECTED"
+    assert review_row is not None
+    assert review_row["status"] == "rejected"
+    assert review_row["review_note"] == "reject docs"
 
 
 def test_rollback_success(tmp_path):
@@ -271,7 +362,7 @@ def test_review_list_system_error_returns_exit_code_2(tmp_path, monkeypatch):
     def boom(_project_root):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(review_cli, "list_pending_proposals", boom)
+    monkeypatch.setattr(review_cli, "list_pending_reviews", boom)
 
     result, code = run_cli(["review", "list", "--project-root", str(project_root)])
 

@@ -7,6 +7,7 @@ Creates the directory skeleton with empty template files.
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 from lib import envelope, paths
@@ -20,6 +21,16 @@ TOPICS_SKELETON = """\
 ## 知识文件
 """
 
+MANIFEST = {
+    "layout_version": "2F",
+    "docs_root": "docs",
+    "catalog_root": "catalog",
+    "store_root": "_store",
+    "store_db": "_store/memory.db",
+    "projection_root": "_store/projections",
+    "project_scope": "project",
+}
+
 
 def run(args: list[str]) -> None:
     parser = argparse.ArgumentParser(prog="memory-hub init")
@@ -32,15 +43,15 @@ def run(args: list[str]) -> None:
     if root.exists():
         envelope.fail("ALREADY_INITIALIZED", f".memory/ already exists at {root}")
 
-    # Create bucket directories and base files
+    # Create docs lane directories and base files.
     created_files = []
     for bucket, files in paths.BASE_FILES.items():
-        bucket_dir = root / bucket
+        bucket_dir = paths.bucket_path(bucket, project_root)
         bucket_dir.mkdir(parents=True, exist_ok=True)
         for filename in files:
             fp = bucket_dir / filename
             fp.write_text("", encoding="utf-8")
-            created_files.append(f"{bucket}/{filename}")
+            created_files.append(f"docs/{bucket}/{filename}")
 
     # Create catalog structure
     catalog_dir = paths.catalog_path(project_root)
@@ -52,6 +63,14 @@ def run(args: list[str]) -> None:
     topics_file = paths.topics_path(project_root)
     atomic_write(topics_file, TOPICS_SKELETON)
     created_files.append("catalog/topics.md")
+
+    store_dir = paths.store_root(project_root)
+    store_dir.mkdir(parents=True, exist_ok=True)
+    paths.projections_root(project_root).mkdir(parents=True, exist_ok=True)
+
+    manifest_file = paths.manifest_path(project_root)
+    atomic_write(manifest_file, json.dumps(MANIFEST, ensure_ascii=False, indent=2) + "\n")
+    created_files.append("manifest.json")
 
     # Auto-trigger catalog.repair
     from lib.catalog_repair import repair

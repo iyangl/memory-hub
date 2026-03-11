@@ -100,7 +100,18 @@ def main() -> int:
         tools = call_mcp(env, {"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
         tool_result = require_jsonrpc_ok(tools, 2)
         tool_names = [tool["name"] for tool in tool_result["tools"]]
-        require(tool_names == ["read_memory", "search_memory", "propose_memory", "propose_memory_update"], f"Unexpected tool list: {tool_names}")
+        require(
+            tool_names == [
+                "read_memory",
+                "search_memory",
+                "propose_memory",
+                "propose_memory_update",
+                "capture_memory",
+                "update_memory",
+                "show_memory_review",
+            ],
+            f"Unexpected tool list: {tool_names}",
+        )
         print_step("read empty system://boot")
         boot = call_mcp(
             env,
@@ -259,6 +270,8 @@ def main() -> int:
         )
         missing_payload = require_tool_payload(require_jsonrpc_ok(missing_update, 8), is_error=True)
         require(missing_payload["code"] == "MEMORY_NOT_FOUND", f"Unexpected error payload: {missing_payload}")
+        require((project_root / ".memory" / "_store" / "memory.db").exists(), "Expected .memory/_store/memory.db to exist")
+        require(not (project_root / ".memoryhub").exists(), "Did not expect legacy .memoryhub/ directory")
         print_step("success")
         print(json.dumps({"ok": True, "project_root": str(project_root)}, ensure_ascii=False, indent=2))
         return 0

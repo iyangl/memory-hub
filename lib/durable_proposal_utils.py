@@ -9,11 +9,11 @@ from lib.durable_errors import DurableMemoryError
 
 _INSERT_PROPOSAL_SQL = """
     INSERT INTO memory_proposals(
-        proposal_kind, status, target_uri, base_version_id, type, title, content,
+        proposal_kind, status, target_uri, base_version_id, type, storage_lane, doc_ref, title, content,
         content_hash, recall_when, why_not_in_code, source_reason, patch_old_string,
         patch_new_string, append_content, guard_decision, guard_reason,
         guard_target_uri, created_at, created_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 
@@ -34,6 +34,8 @@ def insert_proposal(
     target_uri: str,
     base_version_id: int | None,
     memory_type: str,
+    storage_lane: str = "durable",
+    doc_ref: str | None = None,
     title: str,
     content: str,
     recall_when: str,
@@ -54,6 +56,8 @@ def insert_proposal(
             target_uri,
             base_version_id,
             memory_type,
+            storage_lane,
+            doc_ref,
             title,
             content,
             hash_text(content),

@@ -26,6 +26,17 @@ def get_approved_by_uri(project_root: Path | None, uri: str) -> dict[str, Any] |
         return get_approved(conn, uri, required=False)
 
 
+def get_approved_by_doc_ref(project_root: Path | None, doc_ref: str) -> dict[str, Any] | None:
+    """Return an approved dual-write memory by doc ref."""
+    ensure_schema(project_root)
+    with connect(project_root) as conn:
+        row = conn.execute(
+            "SELECT * FROM approved_memories WHERE doc_ref = ? ORDER BY updated_at DESC LIMIT 1",
+            (doc_ref,),
+        ).fetchone()
+    return None if row is None else dict(row)
+
+
 def get_boot_memories(project_root: Path | None) -> list[dict[str, Any]]:
     """Return boot memories in stable order."""
     ensure_schema(project_root)
@@ -56,7 +67,7 @@ def search_approved(
         raise DurableMemoryError("INVALID_LIMIT", "Search limit must be between 1 and 50.")
 
     sql = """
-        SELECT uri, type, title, content, recall_when, updated_at
+        SELECT uri, type, storage_lane, doc_ref, title, content, recall_when, updated_at
         FROM approved_memories
         WHERE (lower(title) LIKE lower(?) OR lower(content) LIKE lower(?))
     """
@@ -86,6 +97,8 @@ def insert_create_proposal(
     why_not_in_code: str,
     source_reason: str,
     created_by: str,
+    storage_lane: str = "durable",
+    doc_ref: str | None = None,
 ) -> dict[str, Any]:
     """Insert a create proposal or return guard result."""
     ensure_schema(project_root)
@@ -114,6 +127,8 @@ def insert_create_proposal(
             target_uri=target_uri,
             base_version_id=None,
             memory_type=memory_type,
+            storage_lane=storage_lane,
+            doc_ref=doc_ref,
             title=clean_title,
             content=clean_content,
             recall_when=recall_when or "",
@@ -129,6 +144,68 @@ def insert_create_proposal(
         "status": "pending",
         "target_uri": target_uri,
         "guard_decision": "PENDING_REVIEW",
+    }
+
+
+def insert_dual_write_update_proposal(
+    project_root: Path | None,
+    *,
+    uri: str,
+    content: str,
+    recall_when: str | None,
+    why_not_in_code: str | None,
+    source_reason: str,
+    created_by: str,
+    doc_ref: str,
+) -> dict[str, Any]:
+    """Insert an update proposal for a dual-write durable summary."""
+    ensure_schema(project_root)
+    approved = get_approved_by_uri(project_root, uri)
+    if approved is None:
+        raise DurableMemoryError("MEMORY_NOT_FOUND", f"Approved memory not found: {uri}")
+    candidate_content = require_text(content, "EMPTY_CONTENT", "Content must not be empty.")
+    candidate_recall = approved["recall_when"] if recall_when is None else recall_when
+    candidate_why = approved["why_not_in_code"] if why_not_in_code is None else why_not_in_code
+    require_text(candidate_why, "MISSING_WHY_NOT_IN_CODE", "why_not_in_code must not be empty.")
+    clean_source = require_text(source_reason, "MISSING_SOURCE_REASON", "source_reason must not be empty.")
+    if (
+        approved["content"] == candidate_content
+        and approved["recall_when"] == candidate_recall
+        and approved["why_not_in_code"] == candidate_why
+    ):
+        return {
+            "code": "NOOP",
+            "proposal_kind": "update",
+            "target_uri": uri,
+            "status": "skipped",
+            "guard_decision": "NOOP",
+            "guard_reason": "summary_unchanged",
+        }
+
+    with transaction(project_root) as conn:
+        proposal_id = insert_proposal(
+            conn,
+            proposal_kind="update",
+            target_uri=uri,
+            base_version_id=approved["current_version_id"],
+            memory_type=approved["type"],
+            storage_lane="dual",
+            doc_ref=doc_ref,
+            title=approved["title"],
+            content=candidate_content,
+            recall_when=candidate_recall or "",
+            why_not_in_code=candidate_why,
+            source_reason=clean_source,
+            guard_reason="dual_write_sync_requires_review",
+            created_by=created_by,
+        )
+    return {
+        "code": "PROPOSAL_CREATED",
+        "proposal_id": proposal_id,
+        "proposal_kind": "update",
+        "target_uri": uri,
+        "base_version_id": approved["current_version_id"],
+        "status": "pending",
     }
 
 
@@ -168,6 +245,8 @@ def insert_update_proposal(
             target_uri=uri,
             base_version_id=approved["current_version_id"],
             memory_type=approved["type"],
+            storage_lane=approved.get("storage_lane", "durable"),
+            doc_ref=approved.get("doc_ref"),
             title=approved["title"],
             content=candidate_content,
             recall_when=candidate_recall or "",

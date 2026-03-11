@@ -7,23 +7,29 @@ from typing import Any
 
 from lib.durable_errors import DurableMemoryError
 from lib.durable_repo import (
-    get_approved_by_uri,
-    get_boot_memories,
     insert_create_proposal,
     insert_update_proposal,
-    search_approved,
 )
-from lib.durable_uri import SYSTEM_BOOT_URI, is_system_boot_uri
+from lib.project_memory_view import read_project_memory, search_project_memory
+from lib.project_review import show_review_summary
+from lib.project_memory_write import capture_memory, update_memory
 
 
-def _success(code: str, message: str, data: dict[str, Any]) -> dict[str, Any]:
+def _success(
+    code: str,
+    message: str,
+    data: dict[str, Any],
+    *,
+    degraded: bool = False,
+    degrade_reasons: list[str] | None = None,
+) -> dict[str, Any]:
     return {
         "ok": True,
         "code": code,
         "message": message,
         "data": data,
-        "degraded": False,
-        "degrade_reasons": [],
+        "degraded": degraded,
+        "degrade_reasons": degrade_reasons or [],
     }
 
 
@@ -38,29 +44,16 @@ def _error(exc: DurableMemoryError) -> dict[str, Any]:
     }
 
 
-def read_memory_tool(project_root: Path | None, uri: str) -> dict[str, Any]:
-    """Read system://boot or an approved durable memory."""
+def read_memory_tool(
+    project_root: Path | None,
+    *,
+    ref: str | None = None,
+    uri: str | None = None,
+    anchor: str | None = None,
+) -> dict[str, Any]:
+    """Read system boot, docs, catalog, or an approved durable memory."""
     try:
-        if is_system_boot_uri(uri):
-            items = get_boot_memories(project_root)
-            return _success(
-                "MEMORY_READ",
-                "Boot memory loaded.",
-                {"uri": SYSTEM_BOOT_URI, "items": items},
-            )
-
-        memory = get_approved_by_uri(project_root, uri)
-        if memory is None:
-            raise DurableMemoryError("MEMORY_NOT_FOUND", f"Approved memory not found: {uri}")
-        data = {
-            "uri": memory["uri"],
-            "type": memory["type"],
-            "title": memory["title"],
-            "content": memory["content"],
-            "recall_when": memory["recall_when"],
-            "current_version_id": memory["current_version_id"],
-            "updated_at": memory["updated_at"],
-        }
+        data = read_project_memory(project_root, ref=ref, uri=uri, anchor=anchor)
         return _success("MEMORY_READ", "Memory loaded.", data)
     except DurableMemoryError as exc:
         return _error(exc)
@@ -68,17 +61,27 @@ def read_memory_tool(project_root: Path | None, uri: str) -> dict[str, Any]:
 
 def search_memory_tool(
     project_root: Path | None,
+    *,
     query: str,
+    scope: str = "durable",
     memory_type: str | None = None,
     limit: int = 10,
 ) -> dict[str, Any]:
-    """Search approved durable memories."""
+    """Search docs lane, durable lane, or both."""
     try:
-        results = search_approved(project_root, query, type=memory_type, limit=limit)
+        search_payload = search_project_memory(
+            project_root,
+            query=query,
+            scope=scope,
+            memory_type=memory_type,
+            limit=limit,
+        )
         return _success(
             "SEARCH_OK",
             "Search completed.",
-            {"query": query, "results": results},
+            search_payload,
+            degraded=bool(search_payload["degraded"]),
+            degrade_reasons=list(search_payload["degrade_reasons"]),
         )
     except DurableMemoryError as exc:
         return _error(exc)
@@ -148,5 +151,79 @@ def propose_memory_update_tool(
             "UPDATE_TARGET": "Existing memory should be updated instead.",
         }[code]
         return _success(code, message, result)
+    except DurableMemoryError as exc:
+        return _error(exc)
+
+
+def show_memory_review_tool(
+    project_root: Path | None,
+    *,
+    proposal_id: int | None = None,
+    ref: str | None = None,
+) -> dict[str, Any]:
+    """Return a structured review summary for a pending proposal."""
+    try:
+        data = show_review_summary(project_root, proposal_id=proposal_id, ref=ref)
+        return _success("REVIEW_DETAIL_OK", "Review detail loaded.", data)
+    except DurableMemoryError as exc:
+        return _error(exc)
+
+
+def capture_memory_tool(
+    project_root: Path | None,
+    *,
+    kind: str,
+    title: str,
+    content: str,
+    reason: str,
+    doc_domain: str | None = None,
+    memory_type: str | None = None,
+    recall_when: str | None = None,
+    why_not_in_code: str | None = None,
+) -> dict[str, Any]:
+    """Capture new project knowledge via the unified write lane."""
+    try:
+        data = capture_memory(
+            project_root,
+            kind=kind,
+            title=title,
+            content=content,
+            reason=reason,
+            doc_domain=doc_domain,
+            memory_type=memory_type,
+            recall_when=recall_when,
+            why_not_in_code=why_not_in_code,
+        )
+        return _success("CAPTURE_OK", "Capture completed.", data)
+    except DurableMemoryError as exc:
+        return _error(exc)
+
+
+def update_memory_tool(
+    project_root: Path | None,
+    *,
+    ref: str,
+    mode: str,
+    old_string: str | None = None,
+    new_string: str | None = None,
+    append: str | None = None,
+    reason: str,
+    recall_when: str | None = None,
+    why_not_in_code: str | None = None,
+) -> dict[str, Any]:
+    """Update docs or durable memory via the unified write lane."""
+    try:
+        data = update_memory(
+            project_root,
+            ref=ref,
+            mode=mode,
+            old_string=old_string,
+            new_string=new_string,
+            append=append,
+            reason=reason,
+            recall_when=recall_when,
+            why_not_in_code=why_not_in_code,
+        )
+        return _success("UPDATE_OK", "Update completed.", data)
     except DurableMemoryError as exc:
         return _error(exc)

@@ -2,9 +2,10 @@
 
 ## Surface Routing
 
-- `.memory/` is the repository knowledge surface.
-- `.memoryhub/` is the durable memory control plane.
-- Do not treat them as interchangeable.
+- `.memory/` is the unified project memory root.
+- `.memory/docs/` is the repository knowledge lane.
+- `.memory/_store/memory.db` is the durable memory control store.
+- Do not treat docs lane and durable store as interchangeable.
 
 Use `.memory/` for:
 
@@ -20,10 +21,15 @@ Use durable memory for information that is:
 
 ## Durable-Memory Trigger
 
-When a request or intermediate conclusion enters durable-memory territory, enter the
-`durable-memory` skill. The skill owns the workflow from that point on.
+Use `project-memory` as the primary memory workflow.
 
-Do not enter the durable-memory skill for:
+Use `memory-admin` only for maintenance and diagnostics.
+
+When a request or intermediate conclusion enters durable-memory territory,
+`project-memory` should route into its internal durable branch. That branch
+owns proposal/update/review from that point on.
+
+Do not enter the durable-memory branch for:
 
 - ordinary code review or architecture discussion
 - one-off answers that do not need cross-session recall
@@ -31,28 +37,33 @@ Do not enter the durable-memory skill for:
 
 ## Hard Boundaries
 
-- Do not edit `.memoryhub/` or `memory.db` directly.
+- Do not edit `.memory/_store/` or `memory.db` directly.
 - Do not use `.memory/` file writes as a substitute for durable memory.
 - Do not approve or reject durable memory before showing proposal details and
   receiving explicit user confirmation.
 - Never rollback durable memory on the user's behalf.
-- Do not bypass the `durable-memory` skill by calling durable-memory tools from
-  generic repo rules.
+- Do not bypass `project-memory` routing by calling durable-memory MCP tools
+  directly from generic repo rules.
+- Do not treat direct docs file writes as the default agent write path; use the
+  unified write lane instead.
 
 ## Review Handoff Policy
 
 - On the first durable-memory action in a session, the first durable-memory tool
-  call must be `read_memory("system://boot")`.
-- Before boot is loaded, do not call `read_memory(uri)`, `search_memory(...)`,
-  `propose_memory(...)`, or `propose_memory_update(...)`.
-- After `PROPOSAL_CREATED`, automatically inspect proposal details with
-  `memory-hub review show <proposal_id>` before stopping or asking for a
-  decision.
+  call must be the `memory-hub` MCP tool
+  `read_memory(ref="system://boot")`.
+- Before boot is loaded, do not call the `memory-hub` MCP tools
+  `read_memory(ref=<non-system>)`, `search_memory(...)`, `capture_memory(...)`,
+  `update_memory(...)`, `propose_memory(...)`, or `propose_memory_update(...)`.
+- After a pending review target is created or matched, first inspect it with the
+  `memory-hub` MCP tool `show_memory_review(...)`. Only use
+  `memory-hub review show <proposal_id|ref>` as a CLI fallback if the MCP review
+  view is unavailable.
 
 - Only approved memories can be updated.
 - If the closest target is a pending proposal, stop at human review split.
-- If the closest target is a pending proposal, inspect queue state, then run
-  `memory-hub review show <proposal_id>` before asking for a decision.
+- If the closest target is a pending proposal, inspect queue state, then use
+  `show_memory_review(...)` before asking for a decision.
 - If the host provides a structured confirmation tool, use it. Otherwise present
   fixed text options:
   - `批准此提案`
@@ -65,19 +76,33 @@ Do not enter the durable-memory skill for:
 Human review split:
 
 - `memory-hub review list`
-- `memory-hub review show <proposal_id>`
-- `memory-hub review approve <proposal_id> ...`
-- `memory-hub review reject <proposal_id> ...`
+- `memory-hub review show <proposal_id|ref>`
+- `memory-hub review approve <proposal_id|ref> ...`
+- `memory-hub review reject <proposal_id|ref> ...`
 
 ## `.memory/` Workflow
 
 Before scoped change or feature work:
 
-1. `catalog-read topics`
-2. `memory.read` related files
-3. `memory.search` if catalog lookup is insufficient
+1. enter `project-memory`
+2. in Codex/Claude, call the `memory-hub` MCP tool `read_memory(ref="catalog://topics")`
+3. read related `doc://...` refs through the same `read_memory(...)` tool
+4. if needed, call `search_memory(..., scope=docs|all)` on the same `memory-hub` MCP server
+
+Do not treat `catalog://...` or `doc://...` as MCP resources.
+Do not use `read_mcp_resource`, and do not invent a server name such as `memory`.
+
+For memory writes in Codex/Claude:
+
+- default to the `memory-hub` MCP tools `capture_memory(...)` and
+  `update_memory(...)`
+- use `show_memory_review(...)` on the same server for review display
+- treat `propose_memory(...)` and `propose_memory_update(...)` as compatibility
+  entrypoints only, not the default workflow
+- use `memory-hub session-extract --file <transcript>` only through the
+  `memory-admin` maintenance path, not as a generic MCP action
 
 When `.memory/` or catalog changes:
 
-- update the module catalog if file structure changed
+- use the unified write lane instead of invoking legacy memory/catalog skills
 - finish with `memory-hub catalog-repair`

@@ -15,7 +15,7 @@ def initialized_project(tmp_path):
     root = tmp_path / ".memory"
     for bucket, files in paths.BASE_FILES.items():
         for f in files:
-            fp = root / bucket / f
+            fp = root / "docs" / bucket / f
             fp.parent.mkdir(parents=True, exist_ok=True)
             fp.write_text("", encoding="utf-8")
     catalog = root / "catalog"
@@ -23,7 +23,7 @@ def initialized_project(tmp_path):
     (catalog / "modules").mkdir(exist_ok=True)
     (catalog / "topics.md").write_text("# Topics\n\n## 代码模块\n\n## 知识文件\n", encoding="utf-8")
     # Write some content to test
-    (root / "architect" / "tech-stack.md").write_text(
+    (root / "docs" / "architect" / "tech-stack.md").write_text(
         "## 技术栈\n\n- Python 3.10+\n", encoding="utf-8"
     )
     return tmp_path

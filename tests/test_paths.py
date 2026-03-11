@@ -35,7 +35,7 @@ class TestPaths:
 
     def test_bucket_path(self):
         bp = paths.bucket_path("pm", Path("/project"))
-        assert bp == Path("/project/.memory/pm")
+        assert bp == Path("/project/.memory/docs/pm")
 
     def test_topics_path(self):
         tp = paths.topics_path(Path("/project"))
@@ -44,3 +44,11 @@ class TestPaths:
     def test_module_file_path(self):
         mp = paths.module_file_path("auth", Path("/project"))
         assert mp == Path("/project/.memory/catalog/modules/auth.md")
+
+    def test_store_db_path(self):
+        db = paths.store_db_path(Path("/project"))
+        assert db == Path("/project/.memory/_store/memory.db")
+
+    def test_manifest_path(self):
+        manifest = paths.manifest_path(Path("/project"))
+        assert manifest == Path("/project/.memory/manifest.json")

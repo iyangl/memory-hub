@@ -77,6 +77,8 @@ def approve_proposal(
                 uri=proposal["target_uri"],
                 version_number=next_version_number(conn, proposal["target_uri"]),
                 type=proposal["type"],
+                storage_lane=proposal.get("storage_lane", "durable"),
+                doc_ref=proposal.get("doc_ref"),
                 title=proposal["title"],
                 content=proposal["content"],
                 recall_when=proposal["recall_when"],
@@ -102,6 +104,9 @@ def approve_proposal(
         raise
     except Exception as exc:
         _raise_transaction_error("APPROVE_TRANSACTION_FAILED", "Approve transaction failed.", exc)
+    from lib.project_memory_projection import refresh_projections
+
+    refresh_projections(project_root)
     return {
         "proposal_id": proposal_id,
         "uri": proposal["target_uri"],
@@ -156,6 +161,8 @@ def rollback_memory(
                 uri=uri,
                 version_number=next_version_number(conn, uri),
                 type=target_version["type"],
+                storage_lane=target_version.get("storage_lane", "durable"),
+                doc_ref=target_version.get("doc_ref"),
                 title=target_version["title"],
                 content=target_version["content"],
                 recall_when=target_version["recall_when"],
@@ -180,6 +187,9 @@ def rollback_memory(
         raise
     except Exception as exc:
         _raise_transaction_error("ROLLBACK_TRANSACTION_FAILED", "Rollback transaction failed.", exc)
+    from lib.project_memory_projection import refresh_projections
+
+    refresh_projections(project_root)
     return {
         "uri": uri,
         "from_version_id": approved["current_version_id"],

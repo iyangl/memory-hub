@@ -92,6 +92,8 @@ def insert_version(
     uri: str,
     version_number: int,
     type: str,
+    storage_lane: str = "durable",
+    doc_ref: str | None = None,
     title: str,
     content: str,
     recall_when: str,
@@ -105,15 +107,17 @@ def insert_version(
     return conn.execute(
         """
         INSERT INTO memory_versions(
-            uri, version_number, type, title, content, content_hash, recall_when,
+            uri, version_number, type, storage_lane, doc_ref, title, content, content_hash, recall_when,
             why_not_in_code, source_reason, supersedes_version_id, created_at,
             created_by, created_via
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             uri,
             version_number,
             type,
+            storage_lane,
+            doc_ref,
             title,
             content,
             hash_text(content),
@@ -142,13 +146,15 @@ def upsert_approved(
         conn.execute(
             """
             INSERT INTO approved_memories(
-                uri, type, title, content, content_hash, recall_when, why_not_in_code,
+                uri, type, storage_lane, doc_ref, title, content, content_hash, recall_when, why_not_in_code,
                 source_reason, current_version_id, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 uri,
                 data["type"],
+                data.get("storage_lane", "durable"),
+                data.get("doc_ref"),
                 data["title"],
                 data["content"],
                 hash_text(data["content"]),
@@ -164,12 +170,14 @@ def upsert_approved(
     conn.execute(
         """
         UPDATE approved_memories
-        SET type = ?, title = ?, content = ?, content_hash = ?, recall_when = ?,
+        SET type = ?, storage_lane = ?, doc_ref = ?, title = ?, content = ?, content_hash = ?, recall_when = ?,
             why_not_in_code = ?, source_reason = ?, current_version_id = ?, updated_at = ?
         WHERE uri = ?
         """,
         (
             data["type"],
+            data.get("storage_lane", "durable"),
+            data.get("doc_ref"),
             data["title"],
             data["content"],
             hash_text(data["content"]),

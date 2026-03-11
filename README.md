@@ -2,10 +2,10 @@
 
 项目知识库 + durable memory 控制面。
 
-当前仓库同时包含两套能力：
+当前仓库包含一个统一根目录下的两条 lane：
 
-1. `.memory/` 文件型项目知识库
-2. `.memoryhub/` SQLite durable memory v1
+1. `.memory/docs/` 项目知识文档 lane
+2. `.memory/_store/memory.db` durable memory store lane
 
 前者服务“项目知识读写与 catalog 索引”，后者服务“LLM 长期记忆的 propose/review/rollback 闭环”。
 
@@ -39,54 +39,51 @@ memory-hub <command> [args]
 memory-hub-mcp
 ```
 
-## 两套存储面
+## 统一目录
 
 ### `.memory/`
 
-项目知识文件与 catalog：
+统一项目记忆根目录：
 
 ```text
 .memory/
-├── pm/
-├── architect/
-├── dev/
-├── qa/
-└── catalog/
+├── manifest.json
+├── docs/
+│   ├── pm/
+│   ├── architect/
+│   ├── dev/
+│   └── qa/
+├── catalog/
+│   ├── topics.md
+│   └── modules/
+└── _store/
+    ├── memory.db
+    └── projections/
+        ├── boot.json
+        └── search.json
 ```
 
-用于记录项目级设计决策、约束、约定和目录索引。
+其中：
 
-v1 不计划移除 `.memory/`。它仍然是项目知识的主存储面。
-
-### `.memoryhub/`
-
-durable memory v1：
-
-```text
-.memoryhub/
-└── memory.db
-```
-
-用于存储：
-
-- `approved_memories`
-- `memory_versions`
-- `memory_proposals`
-- `audit_events`
-
-`.memoryhub/` 不替代 `.memory/` 的全部职责；它只负责 durable memory proposal/review/rollback。
+- `docs/` 记录项目级设计决策、约束、约定和 QA 策略
+- `catalog/` 维护知识索引
+- `_store/memory.db` 存储 durable memory v1 的：
+  `approved_memories`、`memory_versions`、`memory_proposals`、`audit_events`、`docs_change_reviews`
+- `_store/projections/` 承担统一 recall 投影视图：`boot.json` 与 `search.json`
 
 ## 行为层分层
 
-durable-memory v1 的行为层分为四层：
+Phase 2F 起，项目记忆的行为层分为五层：
 
 1. `AGENTS.md` / `CLAUDE.md`
-   - 只识别 durable-memory 语境与硬边界
-2. `skills/durable-memory/SKILL.md`
-   - 决定是否加载 boot memory、检索现有 memory、创建 proposal 或更新 proposal
-3. MCP
-   - 提供 `read/search/propose/update` 能力
-4. CLI
+   - 只识别记忆语境与硬边界
+2. `skills/project-memory/SKILL.md`
+   - 统一项目记忆主入口，决定读 docs / catalog / durable / review，并在内部处理 durable branch
+3. `skills/memory-admin/SKILL.md`
+   - repair / diagnose / session-extract 维护动作
+4. MCP
+   - 提供统一 `read/search/capture/update/show_review`
+5. CLI
    - 只做人类审查与回滚
 
 当前约束：
@@ -94,8 +91,8 @@ durable-memory v1 的行为层分为四层：
 - 普通代码/架构分析不默认进入 durable-memory workflow
 - 跨会话、高价值、非代码信息才应进入 durable memory
 - 如果最相关目标是 pending proposal，只能进入人工审查分流，不能继续 update
-- 一旦进入 durable-memory workflow，本会话第一条 durable-memory 工具调用必须是 `read_memory("system://boot")`
-- proposal 创建成功或命中 pending proposal 后，必须先 `review show <proposal_id>`，再进入确认分流
+- 一旦进入 durable-memory workflow，本会话第一条 durable-memory 工具调用必须是 `memory-hub.read_memory(ref="system://boot")`
+- review 目标进入 pending 状态后，必须先 `memory-hub.show_memory_review(...)`；只有 MCP review 展示不可用时才退回 `review show <proposal_id|ref>`
 
 ## 文件型知识命令
 
@@ -108,9 +105,10 @@ memory-hub index <bucket> <file> --topic <name> --summary "<desc>"
 memory-hub catalog-read [topics|<module>]
 memory-hub catalog-update --file <path-to-json>
 memory-hub catalog-repair
+memory-hub session-extract --file <path-to-session-transcript>
 ```
 
-这套命令仍然服务 `.memory/` 目录，不参与 durable memory v1 的写入审查。
+这套命令仍然服务 `.memory/docs/` 与 `catalog/`，不参与 durable memory v1 的写入审查。
 
 ## Durable Memory CLI
 
@@ -118,13 +116,13 @@ memory-hub catalog-repair
 
 ```bash
 memory-hub review list
-memory-hub review show <proposal_id>
-memory-hub review approve <proposal_id> [--reviewer <id>] [--note <text>]
-memory-hub review reject <proposal_id> --note <text> [--reviewer <id>]
+memory-hub review show <proposal_id|ref>
+memory-hub review approve <proposal_id|ref> [--reviewer <id>] [--note <text>]
+memory-hub review reject <proposal_id|ref> --note <text> [--reviewer <id>]
 memory-hub rollback <uri> --to-version <version_id> --note <text> [--reviewer <id>]
 ```
 
-## Durable Memory MCP
+## Project Memory MCP
 
 本地 stdio MCP server：
 
@@ -138,12 +136,15 @@ python3 -m lib.mcp_server
 memory-hub-mcp
 ```
 
-当前暴露 4 个 tools：
+Phase 2F 后当前 MCP 仍暴露 7 个 tools：
 
 - `read_memory`
 - `search_memory`
 - `propose_memory`
 - `propose_memory_update`
+- `capture_memory`
+- `update_memory`
+- `show_memory_review`
 
 ### 客户端配置示例
 
@@ -180,20 +181,45 @@ memory-hub-mcp
 }
 ```
 
-### Durable Memory 推荐工作流
+### 统一项目记忆推荐工作流
 
-1. 规则层识别当前信息是否进入 durable-memory 语境
-2. 一旦进入 durable-memory 语境，转入 `durable-memory` skill
-3. 由 skill 在首次 durable-memory 动作时决定是否加载 `system://boot`
-4. 由 skill 决定是检索 approved memory、创建 proposal，还是更新 approved memory
-5. `proposal_id` 一旦产生或命中 pending proposal，skill 先自动执行 `review show <proposal_id>`，展示摘要和 diff
-6. 若宿主支持结构化确认工具，则用三分叉确认；否则退化为文本分叉：`批准此提案` / `拒绝此提案` / `暂不处理`
-7. 只有在展示 proposal 详情后且用户明确确认时，agent 才可代理执行 CLI `review approve/reject`
-8. 必要时用 CLI `rollback`
+1. 统一从 `project-memory` 进入记忆工作流
+2. 在 Codex/Claude 里，`read_memory`、`search_memory`、`capture_memory`、`update_memory`、`show_memory_review` 都指 `memory-hub` 这个 MCP server 的 tools；不要把 `doc://...` / `catalog://...` 当成 MCP resources，也不要使用 `read_mcp_resource`
+3. 普通仓库知识读取优先走 `memory-hub.read_memory(ref="doc://...")`、`memory-hub.read_memory(ref="catalog://...")` 与 `memory-hub.search_memory(..., scope=docs|all)`；`scope=all` 默认使用本地 hybrid recall
+4. 统一写入优先走 `memory-hub.capture_memory(kind=auto|docs|durable, ...)` 与 `memory-hub.update_memory(ref, mode=patch|append, ...)`
+5. `propose_memory(...)` 与 `propose_memory_update(...)` 仅作为兼容入口保留，不是默认工作流
+6. 若路由结果是 `docs-only`，系统创建持久 docs change review；批准后再应用 docs 与 catalog 变更
+7. 若路由结果是 `durable-only`，系统继续走 durable proposal / review
+8. 若路由结果是 `dual-write`，系统创建 docs change review，并关联 durable summary proposal；批准 docs review 时同步批准关联 durable proposal
+9. review 目标一旦产生或命中 pending 状态，先用 `memory-hub.show_memory_review(...)` 展示摘要和 diff；只有该 MCP 展示不可用时才退回 CLI `review show <proposal_id|ref>`
+10. 若宿主支持结构化确认工具，则用三分叉确认；否则退化为文本分叉：`批准此提案` / `拒绝此提案` / `暂不处理`
+11. 只有在展示 proposal 详情后且用户明确确认时，agent 才可代理执行 CLI `review approve/reject`
+12. 必要时用 CLI `rollback`
+13. 需要把一次对话沉淀成候选时，通过 `memory-admin` 运行 `memory-hub session-extract --file <transcript>`；提炼出的 docs / durable / dual-write 候选仍然只会进入既有 unified write lane 与 review surface，不会直接写 active state
+
+`search_memory` 当前返回的关键元数据包括：
+
+- `search_kind`
+- `lane`
+- `source_kind`
+- `score`
+- `lexical_score`
+- `semantic_score`
+
+若通过环境变量显式关闭 hybrid recall：
+
+```bash
+MEMORY_HUB_DISABLE_HYBRID_SEARCH=1
+```
+
+系统会退化到 lexical search，并显式返回：
+
+- `degraded: true`
+- `degrade_reasons: ["hybrid_search_disabled"]`
 
 禁止事项：
 
-- 直接修改 `.memoryhub/`
+- 直接修改 `.memory/_store/`
 - 直接改 SQLite
 - 用 `.memory/` 文件型命令代替 durable memory proposal
 - 对 pending proposal 继续发起 update proposal
@@ -225,14 +251,20 @@ bin/selftest-phase1c --keep-root
 - `rollback`
 - 预期错误路径
 
+Phase 2F 会话提炼冒烟可直接执行：
+
+```bash
+memory-hub session-extract --file ./session.txt
+```
+
 会话级行为验收见：
 
 - `.archive/plans/2026-03-10-phase1f-behavior-acceptance.md`
 
-如果你在 Codex CLI 中调试 durable-memory skill，注意它读取的是全局
-`~/.agents/skills/durable-memory/SKILL.md`。修改仓库内
-`skills/durable-memory/SKILL.md` 后，需要同步复制到全局 skill 目录，并重启
-Codex 会话。
+如果你在 Codex CLI 中调试项目记忆 workflow，注意它读取的是全局
+`~/.agents/skills/project-memory/SKILL.md` 与
+`~/.agents/skills/memory-admin/SKILL.md`。修改仓库内 skill 后，需要同步复制到
+全局 skill 目录，并重启 Codex 会话。
 
 ## 测试
 

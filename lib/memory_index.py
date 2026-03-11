@@ -3,7 +3,7 @@
 Usage: memory-hub index <bucket> <file> --topic <name> --summary <desc>
        [--anchor <anchor>]
 
-The target file must already exist in .memory/<bucket>/<file>.
+The target file must already exist in .memory/docs/<bucket>/<file>.
 This command only updates the topics.md knowledge index.
 """
 
@@ -21,7 +21,7 @@ TOPICS_KNOWLEDGE_HEADER = "## 知识文件"
 def _update_topics_knowledge(topics_file: Path, topic: str, summary: str,
                              bucket: str, filename: str, anchor: str | None) -> None:
     """Update the knowledge file section of topics.md."""
-    file_ref = f"{bucket}/{filename}"
+    file_ref = paths.docs_file_ref(bucket, filename)
     if anchor:
         file_ref += f" #{anchor}"
     entry_line = f"- {file_ref} — {summary}"
@@ -61,7 +61,7 @@ def _update_topics_knowledge(topics_file: Path, topic: str, summary: str,
             break
 
     if topic_start is not None:
-        file_prefix = f"- {bucket}/{filename}"
+        file_prefix = f"- {paths.docs_file_ref(bucket, filename)}"
         replaced = False
         for i in range(topic_start + 1, topic_end):
             if lines[i].startswith(file_prefix):
@@ -97,7 +97,10 @@ def run(args: list[str]) -> None:
     # Verify target file exists
     fp = paths.file_path(parsed.bucket, parsed.file, project_root)
     if not fp.exists():
-        envelope.fail("FILE_NOT_FOUND", f"Target file does not exist: {parsed.bucket}/{parsed.file}. Write the file first, then call index.")
+        envelope.fail(
+            "FILE_NOT_FOUND",
+            f"Target file does not exist: docs/{parsed.bucket}/{parsed.file}. Write the file first, then call index.",
+        )
 
     # Update topics.md knowledge index
     topics_file = paths.topics_path(project_root)

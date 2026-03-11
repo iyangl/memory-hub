@@ -9,78 +9,19 @@ from pathlib import Path
 from typing import Any
 
 from lib.durable_mcp_tools import (
+    capture_memory_tool,
     propose_memory_tool,
     propose_memory_update_tool,
     read_memory_tool,
     search_memory_tool,
+    show_memory_review_tool,
+    update_memory_tool,
 )
+from lib.mcp_toolspecs import TOOLS
 
 PROTOCOL_VERSION = "2025-11-25"
 SERVER_NAME = "memory-hub"
 SERVER_VERSION = "0.1.0"
-
-TOOLS = [
-    {
-        "name": "read_memory",
-        "description": "Read system://boot or an approved durable memory by URI.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {"uri": {"type": "string"}},
-            "required": ["uri"],
-            "additionalProperties": False,
-        },
-    },
-    {
-        "name": "search_memory",
-        "description": "Search approved durable memories with substring matching.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string"},
-                "type": {"type": "string"},
-                "limit": {"type": "integer", "minimum": 1, "maximum": 50},
-            },
-            "required": ["query"],
-            "additionalProperties": False,
-        },
-    },
-    {
-        "name": "propose_memory",
-        "description": "Create a durable memory proposal instead of writing directly.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "type": {"type": "string"},
-                "title": {"type": "string"},
-                "content": {"type": "string"},
-                "recall_when": {"type": "string"},
-                "why_not_in_code": {"type": "string"},
-                "source_reason": {"type": "string"},
-            },
-            "required": ["type", "title", "content", "recall_when", "why_not_in_code", "source_reason"],
-            "additionalProperties": False,
-        },
-    },
-    {
-        "name": "propose_memory_update",
-        "description": "Create a patch/append update proposal for an approved durable memory.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "uri": {"type": "string"},
-                "old_string": {"type": "string"},
-                "new_string": {"type": "string"},
-                "append": {"type": "string"},
-                "recall_when": {"type": "string"},
-                "why_not_in_code": {"type": "string"},
-                "source_reason": {"type": "string"},
-            },
-            "required": ["uri", "source_reason"],
-            "additionalProperties": False,
-        },
-    },
-]
-
 
 def _project_root() -> Path | None:
     value = os.environ.get("MEMORY_HUB_PROJECT_ROOT")
@@ -125,11 +66,17 @@ def _require_args(arguments: Any) -> dict[str, Any]:
 
 def _call_tool(name: str, arguments: dict[str, Any], project_root: Path | None) -> dict[str, Any]:
     if name == "read_memory":
-        return read_memory_tool(project_root, uri=arguments.get("uri", ""))
+        return read_memory_tool(
+            project_root,
+            ref=arguments.get("ref"),
+            uri=arguments.get("uri"),
+            anchor=arguments.get("anchor"),
+        )
     if name == "search_memory":
         return search_memory_tool(
             project_root,
             query=arguments.get("query", ""),
+            scope=arguments.get("scope", "durable"),
             memory_type=arguments.get("type"),
             limit=arguments.get("limit", 10),
         )
@@ -153,6 +100,36 @@ def _call_tool(name: str, arguments: dict[str, Any], project_root: Path | None) 
             recall_when=arguments.get("recall_when"),
             why_not_in_code=arguments.get("why_not_in_code"),
             source_reason=arguments.get("source_reason", ""),
+        )
+    if name == "capture_memory":
+        return capture_memory_tool(
+            project_root,
+            kind=arguments.get("kind", ""),
+            title=arguments.get("title", ""),
+            content=arguments.get("content", ""),
+            reason=arguments.get("reason", ""),
+            doc_domain=arguments.get("doc_domain"),
+            memory_type=arguments.get("memory_type"),
+            recall_when=arguments.get("recall_when"),
+            why_not_in_code=arguments.get("why_not_in_code"),
+        )
+    if name == "update_memory":
+        return update_memory_tool(
+            project_root,
+            ref=arguments.get("ref", ""),
+            mode=arguments.get("mode", ""),
+            old_string=arguments.get("old_string"),
+            new_string=arguments.get("new_string"),
+            append=arguments.get("append"),
+            reason=arguments.get("reason", ""),
+            recall_when=arguments.get("recall_when"),
+            why_not_in_code=arguments.get("why_not_in_code"),
+        )
+    if name == "show_memory_review":
+        return show_memory_review_tool(
+            project_root,
+            proposal_id=arguments.get("proposal_id"),
+            ref=arguments.get("ref"),
         )
     raise KeyError(name)
 

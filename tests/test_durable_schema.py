@@ -1,7 +1,5 @@
 """Tests for durable memory schema bootstrap and read helpers."""
 
-from __future__ import annotations
-
 import sqlite3
 
 from lib import paths
@@ -15,7 +13,7 @@ def test_ensure_schema_creates_tables_and_is_idempotent(tmp_path):
     first_db_path = ensure_schema(project_root)
     second_db_path = ensure_schema(project_root)
 
-    assert first_db_path == paths.memoryhub_db_path(project_root)
+    assert first_db_path == paths.store_db_path(project_root)
     assert second_db_path == first_db_path
     assert first_db_path.exists()
 
@@ -33,6 +31,17 @@ def test_ensure_schema_creates_tables_and_is_idempotent(tmp_path):
         assert "memory_versions" in names
         assert "memory_proposals" in names
         assert "audit_events" in names
+        assert "docs_change_reviews" in names
+        proposal_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(memory_proposals)").fetchall()
+        }
+        approved_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(approved_memories)").fetchall()
+        }
+        assert "storage_lane" in proposal_columns
+        assert "doc_ref" in proposal_columns
+        assert "storage_lane" in approved_columns
+        assert "doc_ref" in approved_columns
         versions = conn.execute("SELECT version FROM schema_migrations").fetchall()
         assert len(versions) == 1
     finally:

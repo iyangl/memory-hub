@@ -14,10 +14,10 @@ def initialized_project(tmp_path):
     root = tmp_path / ".memory"
     for bucket, files in paths.BASE_FILES.items():
         for f in files:
-            fp = root / bucket / f
+            fp = root / "docs" / bucket / f
             fp.parent.mkdir(parents=True, exist_ok=True)
             fp.write_text("", encoding="utf-8")
-    (root / "architect" / "tech-stack.md").write_text("## Tech\n\n- Python 3.10+\n", encoding="utf-8")
+    (root / "docs" / "architect" / "tech-stack.md").write_text("## Tech\n\n- Python 3.10+\n", encoding="utf-8")
     catalog = root / "catalog"
     catalog.mkdir(parents=True, exist_ok=True)
     (catalog / "modules").mkdir(exist_ok=True)

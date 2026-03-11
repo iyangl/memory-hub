@@ -1,0 +1,49 @@
+{
+  "ref": "system://boot",
+  "lane": "system",
+  "source_kind": "boot",
+  "generated_at": "2026-03-11T09:46:34Z",
+  "projection_path": "/Users/sunpure/Documents/Code/memory-hub/.memory/_store/projections/boot.json",
+  "items": [
+    {
+      "uri": "constraint://durable-memory-requires-proposal-and-human-review",
+      "type": "constraint",
+      "storage_lane": "durable",
+      "doc_ref": null,
+      "title": "Durable memory requires proposal and human review",
+      "content": "durable memory 不允许直写，必须经过 `propose -> review -> approve/reject` 工作流。长期记忆的生效必须由人工通过审查流程确认，不能跳过 proposal，也不能绕过 review 直接写入 approved memory。",
+      "recall_when": "当准备写入 durable memory、设计长期记忆工作流、评估是否可以直接落库，或判断 LLM 是否可以跳过审查直接生效时回忆。",
+      "updated_at": "2026-03-10T08:41:04Z"
+    },
+    {
+      "uri": "constraint://freeze-durable-memory-external-contract-before-implementation",
+      "type": "constraint",
+      "storage_lane": "durable",
+      "doc_ref": null,
+      "title": "Freeze durable memory external contract before implementation",
+      "content": "为了避免文档、技能和实现再次漂移，durable memory 的外部契约必须先于实现冻结。应先明确并固定不变量、URI 规则、状态机、MCP/CLI 返回结构与错误语义，再按该契约推进 schema、服务层、协议层和测试实现。\n\n在冻结 durable memory 外部契约之后，应该先落 schema 和契约测试，再开始主实现。",
+      "recall_when": "当规划 durable memory 新功能、调整 MCP/CLI 接口、设计 schema、讨论工作流边界，或准备先实现后补文档时回忆。",
+      "updated_at": "2026-03-11T01:55:39Z"
+    },
+    {
+      "uri": "constraint://memory",
+      "type": "constraint",
+      "storage_lane": "dual",
+      "doc_ref": "doc://qa/memory-相关逻辑变更必须补自动化测试和自测记录",
+      "title": "Memory 相关逻辑变更必须补自动化测试和自测记录",
+      "content": "凡是修改 memory 相关逻辑，必须同时补齐对应的自动化测试，并留下可复现的自测记录。没有测试和自测记录的 memory 逻辑改动，不能视为完成。\n\n这类改动的验证标准至少要包括 `pytest -q`，以及一轮端到端自测。",
+      "recall_when": "当准备修改 memory 相关逻辑、评审相关变更是否完成、或决定是否可以在验证不充分的情况下合入时回忆。",
+      "updated_at": "2026-03-11T09:44:33Z"
+    },
+    {
+      "uri": "constraint://item",
+      "type": "constraint",
+      "storage_lane": "dual",
+      "doc_ref": "doc://dev/记忆相关写入必须经过统一写入口",
+      "title": "记忆相关写入必须经过统一写入口",
+      "content": "所有记忆相关写入都必须经过统一写入口处理，不能直接修改 docs lane 或 durable store。\n\n即使只是修正文案，只要属于项目记忆，也不能绕开统一写入口。",
+      "recall_when": "当准备写入项目记忆、评估是否可以直接修改 docs 或 store、或判断轻微文案修正是否可绕过统一流程时回忆。",
+      "updated_at": "2026-03-11T09:46:34Z"
+    }
+  ]
+}

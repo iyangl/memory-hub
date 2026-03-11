@@ -39,19 +39,24 @@ class TestInit:
 
         root = tmp_project / ".memory"
         assert root.exists()
-        assert (root / "pm" / "decisions.md").exists()
-        assert (root / "architect" / "tech-stack.md").exists()
-        assert (root / "architect" / "decisions.md").exists()
-        assert (root / "dev" / "conventions.md").exists()
-        assert (root / "qa" / "strategy.md").exists()
+        assert (root / "docs" / "pm" / "decisions.md").exists()
+        assert (root / "docs" / "architect" / "tech-stack.md").exists()
+        assert (root / "docs" / "architect" / "decisions.md").exists()
+        assert (root / "docs" / "dev" / "conventions.md").exists()
+        assert (root / "docs" / "qa" / "strategy.md").exists()
         assert (root / "catalog" / "topics.md").exists()
         assert (root / "catalog" / "modules").is_dir()
+        assert (root / "_store").is_dir()
+        assert (root / "_store" / "projections").is_dir()
+        assert (root / "manifest.json").exists()
 
     def test_topics_has_skeleton(self, tmp_project):
         run_init(tmp_project)
         content = (tmp_project / ".memory" / "catalog" / "topics.md").read_text(encoding="utf-8")
         assert "## 代码模块" in content
         assert "## 知识文件" in content
+        manifest = json.loads((tmp_project / ".memory" / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["layout_version"] == "2F"
 
     def test_already_initialized(self, tmp_project):
         run_init(tmp_project)

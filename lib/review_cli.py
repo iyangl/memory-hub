@@ -1,22 +1,20 @@
-"""review CLI for durable memory proposals.
+"""Review CLI for durable and docs review targets.
 
 Usage:
   memory-hub review list
-  memory-hub review show <proposal_id>
-  memory-hub review approve <proposal_id> [--reviewer <id>] [--note <text>]
-  memory-hub review reject <proposal_id> --note <text> [--reviewer <id>]
+  memory-hub review show <proposal_id|ref>
+  memory-hub review approve <proposal_id|ref> [--reviewer <id>] [--note <text>]
+  memory-hub review reject <proposal_id|ref> --note <text> [--reviewer <id>]
 """
 
 from __future__ import annotations
 
 import argparse
-import difflib
 from pathlib import Path
 
 from lib import envelope
 from lib.durable_errors import DurableMemoryError
-from lib.durable_repo import get_proposal_detail, list_pending_proposals
-from lib.durable_review import approve_proposal, reject_proposal
+from lib.project_review import approve_review, list_pending_reviews, reject_review, show_review_summary
 
 
 class EnvelopeArgumentParser(argparse.ArgumentParser):
@@ -30,76 +28,67 @@ def _project_root(value: str | None) -> Path | None:
     return Path(value) if value else None
 
 
-def _proposal_id(value: str | None) -> int:
+def _review_selector(value: str | None) -> tuple[int | None, str | None]:
     if value is None:
-        envelope.fail("INVALID_ARGUMENTS", "proposal_id is required.")
+        envelope.fail("INVALID_ARGUMENTS", "review target is required.")
     try:
-        return int(value)
+        return int(value), None
     except ValueError:
-        envelope.fail("INVALID_ARGUMENTS", f"proposal_id must be an integer: {value}")
-    return 0
-
-
-def _computed_diff(base_content: str, proposal_content: str) -> str:
-    diff = difflib.unified_diff(
-        base_content.splitlines(),
-        proposal_content.splitlines(),
-        fromfile="base",
-        tofile="proposal",
-        lineterm="",
-    )
-    return "\n".join(diff)
+        return None, value
 
 
 def _handle_list(args: list[str]) -> None:
     parser = EnvelopeArgumentParser(prog="memory-hub review list")
     parser.add_argument("--project-root", default=None)
     parsed = parser.parse_args(args)
-    items = list_pending_proposals(_project_root(parsed.project_root))
+    items = list_pending_reviews(_project_root(parsed.project_root))
     envelope.ok({"items": items}, code="REVIEW_QUEUE_OK", message="Review queue loaded.")
 
 
 def _handle_show(args: list[str]) -> None:
     parser = EnvelopeArgumentParser(prog="memory-hub review show")
-    parser.add_argument("proposal_id", nargs="?")
+    parser.add_argument("review_target", nargs="?")
     parser.add_argument("--project-root", default=None)
     parsed = parser.parse_args(args)
-    detail = get_proposal_detail(_project_root(parsed.project_root), _proposal_id(parsed.proposal_id))
-    base_content = "" if detail["base_version"] is None else detail["base_version"]["content"]
-    data = {**detail, "computed_diff": _computed_diff(base_content, detail["proposal"]["content"])}
+    proposal_id, ref = _review_selector(parsed.review_target)
+    data = show_review_summary(_project_root(parsed.project_root), proposal_id=proposal_id, ref=ref)
     envelope.ok(data, code="PROPOSAL_DETAIL_OK", message="Proposal detail loaded.")
 
 
 def _handle_approve(args: list[str]) -> None:
     parser = EnvelopeArgumentParser(prog="memory-hub review approve")
-    parser.add_argument("proposal_id", nargs="?")
+    parser.add_argument("review_target", nargs="?")
     parser.add_argument("--reviewer", default="cli")
     parser.add_argument("--note", default="")
     parser.add_argument("--project-root", default=None)
     parsed = parser.parse_args(args)
-    result = approve_proposal(
+    proposal_id, ref = _review_selector(parsed.review_target)
+    result = approve_review(
         _project_root(parsed.project_root),
-        _proposal_id(parsed.proposal_id),
-        parsed.reviewer,
-        parsed.note,
+        proposal_id=proposal_id,
+        ref=ref,
+        reviewer=parsed.reviewer,
+        note=parsed.note,
     )
     envelope.ok(result, code="PROPOSAL_APPROVED", message="Proposal approved.")
 
 
 def _handle_reject(args: list[str]) -> None:
     parser = EnvelopeArgumentParser(prog="memory-hub review reject")
-    parser.add_argument("proposal_id", nargs="?")
+    parser.add_argument("review_target", nargs="?")
     parser.add_argument("--reviewer", default="cli")
     parser.add_argument("--note", default=None)
     parser.add_argument("--project-root", default=None)
     parsed = parser.parse_args(args)
     if parsed.note is None or not parsed.note.strip():
         envelope.fail("MISSING_REVIEW_NOTE", "Review note must not be empty.")
-    result = reject_proposal(
+    proposal_id, ref = _review_selector(parsed.review_target)
+    result = reject_review(
         _project_root(parsed.project_root),
-        _proposal_id(parsed.proposal_id),
-        parsed.reviewer,
-        parsed.note,
+        proposal_id=proposal_id,
+        ref=ref,
+        reviewer=parsed.reviewer,
+        note=parsed.note,
     )
     envelope.ok(result, code="PROPOSAL_REJECTED", message="Proposal rejected.")
 

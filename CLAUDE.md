@@ -1,11 +1,13 @@
 # Memory Hub — AI 行为指引
 
-本仓库当前包含两套 memory surface，必须区分使用：
+本仓库当前在 `.memory/` 下包含两条 lane，必须区分使用：
 
 1. `.memory/`
+   - 统一项目记忆根目录
+2. `.memory/docs/`
    - 项目知识文件
    - 通过 `read/list/search/index/catalog-*` 维护
-2. `.memoryhub/`
+3. `.memory/_store/memory.db`
    - durable memory v1
    - 通过 `MCP propose/read/search + CLI review/rollback` 维护
 
@@ -21,7 +23,8 @@
 | `catalog.read` | 读取轻量目录或模块索引 |
 | `catalog.update` | 更新代码模块索引 |
 | `catalog.repair` | 一致性检查与自愈 |
-| `durable-memory` | durable memory v1：MCP tools + CLI review 工作流 |
+| `project-memory` | 统一项目记忆入口：读 docs/catalog/durable/review |
+| `memory-admin` | 项目记忆维护入口：repair/diagnose/session-extract |
 
 ## `.memory/` 项目知识工作流
 
@@ -32,16 +35,22 @@
 
 读：
 
-1. `scoped_change` / `feature_work` 前先 `catalog-read topics`
-2. 再 `memory.read` 相关知识文件
-3. catalog 不够时用 `memory.search`
+1. `scoped_change` / `feature_work` 前先进入 `project-memory`
+2. 在宿主里调用 `memory-hub` MCP 的 `read_memory(ref="catalog://topics")`
+3. 再通过同一个 `read_memory(...)` 读取相关 `doc://...`
+4. docs 上下文不够时，用同一个 `memory-hub` MCP 调 `search_memory(..., scope=docs|all)`
+
+不要把 `catalog://...` 或 `doc://...` 当成 MCP resource。
+不要使用 `read_mcp_resource`，也不要假设存在名为 `memory` 的 MCP server。
 
 写：
 
-1. AI 直接编辑 `.memory/<bucket>/<file>`
-2. 再运行 `memory-hub index ...`
-3. 若代码模块索引变更，运行 `memory-hub catalog-update --file ...`
-4. 任务结束前执行 `memory-hub catalog-repair`
+1. 宿主里统一通过 `memory-hub` MCP 的 `capture_memory(...)` 与 `update_memory(...)` 进入写入口
+2. review 展示优先用同一个 `memory-hub` MCP 的 `show_memory_review(...)`
+3. `propose_memory(...)` / `propose_memory_update(...)` 只作为兼容入口，不作为默认规则写法
+4. `session-extract` 只通过 `memory-admin` 走 `memory-hub session-extract --file ...`
+5. 若确实发生人工 docs 直写，再通过统一 write lane 或 review flow 补齐索引一致性
+6. 任务结束前执行 `memory-hub catalog-repair`
 
 ## Durable Memory v1 工作流
 
@@ -53,17 +62,22 @@
 
 规则：
 
-1. 一旦识别到 durable-memory 语境，立即进入 `durable-memory` skill
-2. 一旦进入 durable-memory workflow，本会话第一条 durable-memory 工具调用必须是 `read_memory("system://boot")`
-3. 由 skill 决定是否检索现有 memory、创建 proposal 或更新 proposal
-4. proposal 创建成功后，skill 必须自动执行 `review show <proposal_id>`，展示摘要和 diff，再进入确认分流
-5. 如果最相关目标是 pending proposal，skill 必须先 `review show <proposal_id>`，再进入人工审查分流
-6. 宿主若提供结构化确认工具则优先使用；否则退化为固定文本分叉：`批准此提案` / `拒绝此提案` / `暂不处理`
-7. 只有在展示 proposal 详情后且用户明确选择 `批准此提案` 或 `拒绝此提案` 时，LLM 才可代理执行对应的 CLI 审查命令
-8. durable memory 只接受 `identity / decision / constraint / preference`
-9. 禁止直接写 `.memoryhub/`、SQLite、导出文件
-10. 禁止 LLM 自行 rollback durable memory
-11. 禁止对 pending proposal 继续 update、amend、merge、reopen
+1. 统一从 `project-memory` 进入记忆工作流
+2. 上述统一动作都指 `memory-hub` 这个 MCP server 的对应 tools
+3. 若任务进入 durable-memory 语境，由 `project-memory` 进入内部 durable branch
+4. 一旦进入 durable-memory workflow，本会话第一条 durable-memory 工具调用必须是 `memory-hub.read_memory(ref="system://boot")`
+5. `capture_memory(kind=auto|docs|durable)` 与 `update_memory(ref, mode=patch|append)` 是默认写入口
+6. `docs-only` 变更进入持久 docs change review；批准后再应用 docs 与 catalog 变更
+7. `durable-only` 变更继续走 proposal / review
+8. `dual-write` 创建 docs change review，并关联 durable summary proposal；批准 docs review 时同步批准关联 durable proposal
+9. review 目标进入 pending 状态后，skill 必须先调用 `memory-hub.show_memory_review(...)`，展示摘要和 diff，再进入确认分流；只有 MCP review 展示不可用时才退回 `review show <proposal_id|ref>`
+10. 如果最相关目标是 pending proposal 或 pending docs review，skill 必须先 `show_memory_review(...)`，再进入人工审查分流
+11. 宿主若提供结构化确认工具则优先使用；否则退化为固定文本分叉：`批准此提案` / `拒绝此提案` / `暂不处理`
+12. 只有在展示 proposal 详情后且用户明确选择 `批准此提案` 或 `拒绝此提案` 时，LLM 才可代理执行对应的 CLI 审查命令
+13. durable memory 只接受 `identity / decision / constraint / preference`
+14. 禁止直接写 `.memory/_store/`、SQLite、导出文件
+15. 禁止 LLM 自行 rollback durable memory
+16. 禁止对 pending proposal 继续 update、amend、merge、reopen
 
 ### Durable Memory 价值门槛
 
@@ -87,7 +101,7 @@
 
 ### Durable Memory 禁止事项
 
-- 不要直接编辑 `.memoryhub/`
+- 不要直接编辑 `.memory/_store/`
 - 不要直接操作 `memory.db`
 - 不要把 `.memory/` 文件写入当成 durable memory
 - 不要在展示 proposal 详情和拿到明确确认前执行 `review approve/reject`

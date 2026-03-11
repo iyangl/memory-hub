@@ -62,3 +62,12 @@
 - C: 等待 Codex 提供稳定的结构化提问工具后再优化交互
 选择原因：B 能在不改 MCP/CLI/SQLite 契约的前提下，直接修复当前会话级验收失败项，同时给 Codex 提供不依赖 Plan Mode 的降级路径；Claude 若具备 `AskUserQuestion`，则可继续使用更好的结构化确认体验。这个方案只放宽 `approve/reject`，仍然把 `rollback` 留在人工手动边界内。
 影响：`skills/durable-memory/SKILL.md` 必须明确规定 first-call boot、`review show` handoff、宿主能力分流和固定确认短语；`AGENTS.md`、`CLAUDE.md`、`README.md` 与行为验收清单同步收紧。Codex 使用的全局 `durable-memory` skill 副本必须与仓库内 skill 保持同步，并在同步后重启会话。
+
+### 决策 8 — 2026-03-11
+背景：v2 在 Phase 2B 到 Phase 2F 期间已经把 docs/catalog/durable/review 的统一入口收敛到 `project-memory`，但仓库和全局 skill 安装里仍残留一个独立可见的 `durable-memory` skill。继续保留第三个可见 skill，会让用户误以为 durable flow 仍是独立产品入口，也与“对外只保留两个 skill”的 v2 目标冲突。
+方案：
+- A: 保留 `durable-memory` 作为第三个可见 skill，只在文档里强调它是内部子流程
+- B: 把 boot-first、proposal routing、pending review split 与确认分流全部并入 `project-memory`，移除独立可见的 `durable-memory` skill ← 选择
+- C: 彻底放弃 durable-specific workflow，把 proposal/review 细节重新写回全局规则
+选择原因：B 不改变 SQLite、MCP、CLI 的任何外部契约，只收口行为层入口，能以最小改动让 v2 的产品形态与实现一致。它也保留了 durable-specific 纪律，只是把这部分逻辑下沉成 `project-memory` 内部 branch，而不是继续暴露为第三个 skill。
+影响：`skills/project-memory/SKILL.md` 需要吸收 durable-memory workflow 全部内容；仓库级规则与 README/CLAUDE 只保留 `project-memory` 与 `memory-admin` 两个可见 skill；全局安装的 `durable-memory` skill 副本应移除。历史文档可保留旧记录，但当前基线与新会话不再暴露第三个 skill。

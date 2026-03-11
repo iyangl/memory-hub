@@ -3,8 +3,8 @@
 Usage: memory-hub catalog-repair [--project-root <path>]
 
 Checks:
-1. Dead links: topics.md references non-existent files → auto-delete (fixed)
-2. Missing registration: bucket files not in topics.md → ai_actions
+1. Dead links: topics.md references non-existent docs lane files → auto-delete (fixed)
+2. Missing registration: docs lane files not in topics.md → ai_actions
 3. Duplicate topics: same topic appears multiple times → manual_actions
 4. Invalid anchors: #anchor not found in target file → ai_actions or manual_actions
 """
@@ -66,7 +66,6 @@ def _slugify(text: str) -> str:
 
 def repair(project_root: Path | None = None) -> dict:
     """Run repair checks and return results dict (does not call envelope)."""
-    root = paths.memory_root(project_root)
     topics_file = paths.topics_path(project_root)
 
     fixed = []
@@ -84,10 +83,10 @@ def repair(project_root: Path | None = None) -> dict:
     lines_to_remove = set()
     for entry in entries:
         ref = entry["file_ref"]
-        # Check if it's a bucket file reference (bucket/file.md)
-        parts = ref.split("/", 1)
-        if len(parts) == 2 and parts[0] in paths.BUCKETS:
-            target = root / ref
+        parsed = paths.parse_docs_file_ref(ref)
+        if parsed is not None:
+            bucket, filename = parsed
+            target = paths.file_path(bucket, filename, project_root)
             if not target.exists():
                 lines_to_remove.add(entry["line_number"])
                 fixed.append({
@@ -95,6 +94,16 @@ def repair(project_root: Path | None = None) -> dict:
                     "file_ref": ref,
                     "line": entry["line_number"] + 1,
                 })
+            continue
+
+        legacy_parts = ref.split("/", 1)
+        if len(legacy_parts) == 2 and legacy_parts[0] in paths.BUCKETS:
+            ai_actions.append({
+                "type": "legacy_docs_ref",
+                "file_ref": ref,
+                "suggested": paths.docs_file_ref(legacy_parts[0], legacy_parts[1]),
+                "action": f"Update legacy docs ref {ref} to {paths.docs_file_ref(legacy_parts[0], legacy_parts[1])} in topics.md",
+            })
 
     # --- Check 2: Missing registration ---
     registered_files = set()
@@ -102,13 +111,13 @@ def repair(project_root: Path | None = None) -> dict:
         registered_files.add(entry["file_ref"])
 
     for bucket in paths.BUCKETS:
-        bp = root / bucket
+        bp = paths.bucket_path(bucket, project_root)
         if not bp.exists():
             continue
         for md_file in sorted(bp.iterdir()):
             if md_file.suffix != ".md":
                 continue
-            rel = f"{bucket}/{md_file.name}"
+            rel = paths.docs_file_ref(bucket, md_file.name)
             if rel not in registered_files:
                 ai_actions.append({
                     "type": "missing_registration",
@@ -142,11 +151,12 @@ def repair(project_root: Path | None = None) -> dict:
             continue  # Already flagged as dead link
 
         ref = entry["file_ref"]
-        parts = ref.split("/", 1)
-        if len(parts) != 2 or parts[0] not in paths.BUCKETS:
+        parsed = paths.parse_docs_file_ref(ref)
+        if parsed is None:
             continue
 
-        target = root / ref
+        bucket, filename = parsed
+        target = paths.file_path(bucket, filename, project_root)
         if not target.exists():
             continue
 

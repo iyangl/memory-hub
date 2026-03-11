@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import sys
+from io import StringIO
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +29,8 @@ def seed_approved_memory(
     source_reason: str = "seed source",
     actor: str = "seed",
     created_via: str = "approve",
+    storage_lane: str = "durable",
+    doc_ref: str | None = None,
 ) -> int:
     """Insert a version row and point approved_memories at it."""
     with transaction(project_root) as conn:
@@ -42,15 +47,17 @@ def seed_approved_memory(
         version_id = conn.execute(
             """
             INSERT INTO memory_versions(
-                uri, version_number, type, title, content, content_hash, recall_when,
+                uri, version_number, type, storage_lane, doc_ref, title, content, content_hash, recall_when,
                 why_not_in_code, source_reason, supersedes_version_id, created_at,
                 created_by, created_via
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 uri,
                 version_number,
                 memory_type,
+                storage_lane,
+                doc_ref,
                 title,
                 content,
                 hash_text(content),
@@ -67,13 +74,15 @@ def seed_approved_memory(
             conn.execute(
                 """
                 INSERT INTO approved_memories(
-                    uri, type, title, content, content_hash, recall_when, why_not_in_code,
+                    uri, type, storage_lane, doc_ref, title, content, content_hash, recall_when, why_not_in_code,
                     source_reason, current_version_id, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     uri,
                     memory_type,
+                    storage_lane,
+                    doc_ref,
                     title,
                     content,
                     hash_text(content),
@@ -89,11 +98,13 @@ def seed_approved_memory(
             conn.execute(
                 """
                 UPDATE approved_memories
-                SET content = ?, content_hash = ?, recall_when = ?, why_not_in_code = ?,
+                SET storage_lane = ?, doc_ref = ?, content = ?, content_hash = ?, recall_when = ?, why_not_in_code = ?,
                     source_reason = ?, current_version_id = ?, updated_at = ?
                 WHERE uri = ?
                 """,
                 (
+                    storage_lane,
+                    doc_ref,
                     content,
                     hash_text(content),
                     recall_when,
@@ -128,3 +139,23 @@ def count_rows(project_root: Path, table_name: str) -> int:
     with connect(project_root) as conn:
         row = conn.execute(f"SELECT COUNT(*) AS count FROM {table_name}").fetchone()
     return int(row["count"])
+
+
+def run_cli_command(args: list[str]) -> tuple[dict[str, object], int]:
+    """Run lib.cli.main with captured stdout."""
+    from lib.cli import main
+
+    old_stdout = sys.stdout
+    old_argv = sys.argv
+    sys.stdout = StringIO()
+    sys.argv = ["memory-hub", *args]
+    try:
+        try:
+            main()
+        except SystemExit as exc:
+            payload = json.loads(sys.stdout.getvalue())
+            return payload, int(exc.code)
+        raise AssertionError("CLI did not exit via SystemExit.")
+    finally:
+        sys.stdout = old_stdout
+        sys.argv = old_argv
