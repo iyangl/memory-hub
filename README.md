@@ -227,7 +227,7 @@ bin/selftest-phase1c --keep-root
 
 会话级行为验收见：
 
-- `.archive/plans/2026-03-10-phase1e-behavior-acceptance.md`
+- `.archive/plans/2026-03-10-phase1f-behavior-acceptance.md`
 
 如果你在 Codex CLI 中调试 durable-memory skill，注意它读取的是全局
 `~/.agents/skills/durable-memory/SKILL.md`。修改仓库内
