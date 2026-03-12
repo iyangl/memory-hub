@@ -1,4 +1,7 @@
 
+• Model changed to gpt-5.4 medium
+
+
 › 你先帮我快速理解一下，这个项目现在的记忆系统是怎么分层的，我后面要继续开发。
 
 
@@ -1045,3 +1048,349 @@ approve_proposal|
 
 
 • 继续。你下一步给我具体目标，我直接按当前规则推进：统一写入口、memory 相关改动补测试、至少跑 pytest -q 和一轮端到端自测。
+^C%                                                                                                                        
+codex
+
+╭──────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.114.0)                   │
+│                                              │
+│ model:     gpt-5.4 medium   /model to change │
+│ directory: ~/Documents/Code/memory-hub       │
+╰──────────────────────────────────────────────╯
+
+  Tip: New Use /fast to enable our fastest inference at 2X plan usage.
+
+
+› 帮我看一下这次改动里，有没有形成新的规则、例外规则，或者文档已经偏离实现的地方。
+
+
+• 这次我按“记忆维护/漂移检查”来做，先走 memory-admin 和 project-memory 的读取流程，确认项目记忆与当前改动的关联范围，再检查
+  本地改动里是否出现了新的规则、例外规则，或文档与实现偏离。
+
+• Explored
+  └ Read SKILL.md
+
+• Called
+  └ ace-tool.codebase-retrieval({"information_request":"需要为当前仓库做一次‘改动是否形成新规则/例外规则/文档漂移’检查。请
+        先给出与项目记忆、catalog、docs lane、memory discover/repair workflow、以及可能受本次改动影响的实现模块相关的代码与
+        文档位置，特别是：1) 负责 catalog/topics/docs 读取与更新的实现；2) 负责 discover / drift / decision extraction 的实
+        现或命令入口；3) 任何与规则、约束、例外、decision log、docs drift 判定相关的模块、schema、测试。请返回关键文件和符
+        号，便于后续精读与验证调用链。"})
+    Failed to retrieve codebase information: HTTP error: 401 Unauthorized
+
+• Called memory.read_mcp_resource({"server":"memory","uri":"catalog://topics"})
+  └ Error: resources/read failed: unknown MCP server 'memory'
+
+■ Conversation interrupted - tell the model what to do differently. Something went wrong? Hit `/feedback` to report the
+issue.
+^C%                                                                                                                        
+codex
+
+╭──────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.114.0)                   │
+│                                              │
+│ model:     gpt-5.4 medium   /model to change │
+│ directory: ~/Documents/Code/memory-hub       │
+╰──────────────────────────────────────────────╯
+
+  Tip: New Try the Codex App with 2x rate limits until April 2nd. Run 'codex app' or visit
+  https://chatgpt.com/codex?app-landing-page=true
+
+
+› 帮我看一下这次改动里，有没有形成新的规则、例外规则，或者文档已经偏离实现的地方。
+
+
+• 这次我按“变更发现/文档漂移检查”来处理，先读取相关 skill 和项目记忆规则，再基于当前工作区内容判断有没有新的规则、例外规则
+  或实现与文档偏离。
+
+• Explored
+  └ Read SKILL.md
+
+• Called memory-hub.read_memory({"ref":"system://boot"})
+  └ {"ok": true, "code": "MEMORY_READ", "message": "Memory loaded.", "data": {"ref": "system://boot", "lane": "system", "s
+        ource_kind": "boot", "generated_at": "2026-03-11T09:46:34Z", "projection_path": "/Users/sunpure/Documents/Code/mem
+        ory-hub/.memory/_store/projections/boot.json", "items": [{"uri":
+        "constraint://durable-memory-requires-proposal-and-human-review", "type": "constraint", "storage_lane": "durable",
+        "doc_ref": null, "title": "Durable memory requires proposal and human review", "content": "durable memory 不允许直
+        写，必须经过 `propose -> review -> approve/reject` 工作流。长期记忆的生效必须由人工通过审查...
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• 我已经切到 memory-admin 路径，并加载了 durable boot。下一步先读项目 catalog，再看 discover 这条维护链路如何判定“新规则 /
+  例外 / 文档漂移”，避免凭感觉下结论。
+
+• Called memory-hub.read_memory({"ref":"catalog://topics"})
+  └ {"ok": true, "code": "MEMORY_READ", "message": "Memory loaded.", "data": {"ref": "catalog://topics", "lane": "catalog",
+        "source_kind": "catalog", "target": "topics", "name": null, "content": "# Memory Hub — Topics Index\n\n## 代码模块
+        \n- core — 基础设施与仓库级行为接线：CLI 分发、JSON envelope、路径管理、规则入口、MCP/自测启动\n- memory — 知识管
+        理命令：init/read/list/search/index\n- catalog — 索引管理命令：read/update/repair\n- durable-memory — v2 主线 + de
+        cision discovery Phase 1：统一 read/search/capture/update/show review、本地 hybrid recall、boot/search projections
+        、session-extract 与 discover 候选发现\n- tests — 单元测试：核心模块与 durable memory ...
+
+• Called
+  └ ace-tool.codebase-retrieval({"information_request":"请详细定位并总结这个仓库中与“memory-hub discover”相关的实现、命令入
+        口、候选项判定规则、它读取哪些变更来源，以及任何与 docs drift / decision discovery / exception detection 相关的测试
+        和文档。需要包含文件路径、关键符号、调用链、判定条件和已知限制。"})
+    Failed to retrieve codebase information: HTTP error: 401 Unauthorized
+
+• Explored
+  └ Search discover|docs drift|exception|rule|decision in .memory
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• 代码检索工具这次不可用，我改用仓库内实现和测试直接核对。先读 discover 的入口、上下文装配和 detector，再实际跑一遍 memory-
+  hub discover 看它对当前改动给出的候选。
+
+• Explored
+  └ Read discovery_cli.py, discovery_signals.py, decision_discovery.py, discovery_context.py
+
+• Ran python3 -m lib.cli discover --project-root /Users/sunpure/Documents/Code/memory-hub
+  └ {
+      "ok": true,
+    … +13 lines
+      "message": "Decision discovery completed."
+    }
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• discover 的机器判定结果是 0 个候选，且当前工作区改动只落在 AGENTS.md、skills/memory-admin/SKILL.md、skills/project-
+  memory/SKILL.md。我接着人工核对这些说明性变更和仓库实现是否一致，重点看有没有新增流程约束或文档已经跑偏。
+
+• Explored
+  └ Read AGENTS.md, SKILL.md, README.md
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• 我在对 README、AGENTS 和 skill 文案做交叉验证。现在看下来，大方向一致，但还要再核对两类细节：一是 README 里的流程描述有没
+  有漏掉 discover，二是文档提到的 MCP/CLI 能力面是否和实际导出一致。
+
+• Explored
+  └ Search show_memory_review|capture_memory|update_memory|propose_memory|propose_memory_update|tools =|tool\( in lib
+    Read test_decision_discovery.py, mcp_server.py
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• 结论已经比较清楚了：这次变更本身没有引入新的代码级例外实现，主要是在收紧 agent/skill 路由规则。还剩最后一步，我把对应行号
+  补齐，区分“新规则”和“现有文档与实现/skill 的偏差”。
+
+• Explored
+  └ Read AGENTS.md, SKILL.md, discovery_signals.py, README.md, discovery_context.py
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• 有，形成了规则收口，但没有看到新的“例外规则”落到实现里；同时有 1 处 README 已经落后于当前 skill/实现。
+
+  发现
+
+  1. 文档漂移：README.md:82 仍把 memory-admin 描述成 repair / diagnose / session-extract，遗漏了 discover。但当前规则已经明
+     确把 discover 归到 memory-admin 维护路径里，AGENTS.md:104 和 skills/memory-admin/SKILL.md:65 都一致要求“检查当前改动里
+     是否有新规则 / 例外规则 / docs drift”时走 memory-hub discover。这属于说明文档偏离当前 workflow。
+  2. 轻微命名漂移：README.md:85 写的是 MCP 提供 show_review，但实际 tool 名是 show_memory_review，实现见 lib/
+     mcp_server.py:128，README 后文自己的工具清单也写成了 show_memory_review，见 README.md:140。这更像文案没同步，不是行为
+     错误。
+
+  这次改动里已经形成/强化的规则
+
+  - project-memory 是主入口，memory-admin 只做维护与诊断，不参与主 workflow，见 AGENTS.md:24 和 skills/project-memory/
+    SKILL.md:24。
+  - session-extract 和 discover 都只能走 memory-admin 维护路径，不能当成通用 MCP 写入口，见 AGENTS.md:104。
+  - durable 分支的硬规则被进一步收紧：先 read_memory(system://boot)，pending review 先 show_memory_review(...)，再进入人工
+    确认分流，见 AGENTS.md:52 和 skills/project-memory/SKILL.md:119。
+
+  没有看到的东西
+
+  - 没看到新的实现级“例外规则”。我实际跑了 python3 -m lib.cli discover --project-root /Users/sunpure/Documents/Code/memory-
+    hub，结果是 candidate_count: 0，当前工作区改动只命中 AGENTS.md、skills/memory-admin/SKILL.md、skills/project-memory/
+    SKILL.md。结合 lib/discovery_context.py:27 和 lib/discovery_signals.py:21，这说明当前没有被探测到的代码实现级新规则/新
+    例外，主要是 workflow 文档和 skill 约束在收口。
+
+
+› 结合这轮改动和我们刚才讨论的内容，帮我判断有没有值得沉淀成项目知识的规则候选，但先不要直接生效。
+
+
+• 我按“候选发现、不生效”处理：先基于这轮改动和刚才确认出的约束，给 discover 补一份摘要输入，再结合现有 docs/skills 判断哪些
+  值得进项目知识候选。
+
+• Ran mktemp /tmp/memory-hub-discover-summary.XXXXXX.txt
+  └ /tmp/memory-hub-discover-summary.XXXXXX.txt
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• 我拿到一个临时摘要文件路径，接着把这轮讨论里确认的规则收口写进去，再跑一次只读发现，最后人工筛掉噪音候选。
+
+• Ran printf '%s
+  │ ' '统一项目记忆必须从 project-memory 进入。memory-admin 只用于维护动作，例如 discover、session-extract、
+  │ catalog-repair。判断当前代码改动里是否有新规则、例外规则或 docs drift 候选时，必须通过 memory-admin 运行 memory-hub
+  │ … +2 lines
+  └ (no output)
+
+• Explored
+  └ Read decisions.md, 记忆相关写入必须经过统一写入口.md
+
+• Ran python3 -m lib.cli discover --project-root /Users/sunpure/Documents/Code/memory-hub --summary-file /tmp/
+  │ memory-hub-discover-summary.XXXXXX.txt
+  └ {
+      "ok": true,
+    … +41 lines
+      "message": "Decision discovery completed."
+    }
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• 有，值得沉淀的候选主要是 1 条主规则，外加 1 条文档同步候选。
+
+  discover 在结合这轮改动和我们刚才讨论的摘要后，返回了 1 个高置信候选：docs-drift -> doc://pm/decisions。它指向的是 pm/de
+  cisions.md，因为现有产品决策里已经记录了 “discovery lane 不直接写 active state” 这层方向，但还没有把这轮新收紧的入口规则
+  写进去：统一项目记忆必须从 project-memory 进入，memory-admin 只负责维护动作；当用户要判断“当前改动里有没有新规则、例外规
+  则或 docs drift 候选”时，应通过 memory-admin 运行 memory-hub discover。这条我认为值得作为项目知识候选保留，而且更像 docs-
+  only 候选，不需要进入 durable memory。
+
+  另外还有 1 条我认为值得一起作为候选看待，但它更偏“实现文档修正”而不是新知识：README 对 memory-admin 的职责描述漏了
+  discover，并且行为层那一段把 MCP 能力写成了 show_review，而实现实际是 show_memory_review，见 README.md:82 和 lib/
+  mcp_server.py:128。这条不一定要进项目决策文档，但至少是明确的 docs drift 候选。
+
+  没有看到值得单独沉淀的“新例外规则”。这轮改动是在收紧入口和审查分流，没有引入某个受限场景下的特殊处理分支；discover 也没有
+  报出 exception-rule 候选。
+
+  如果按候选清单表达，我会这样归纳，先不生效：
+
+  - 候选 1：project-memory 是统一项目记忆主入口，memory-admin 仅负责维护/诊断动作，discover 与 session-extract 均属维护路
+    径。
+  - 候选 2：判断“当前改动是否产生新规则、例外规则或 docs drift”时，标准入口是 memory-admin -> memory-hub discover，且该命令
+    只返回候选，不直接写 active docs 或 approved durable state。
+  - 候选 3：README 需要同步 memory-admin 包含 discover，以及 MCP review tool 的正式名称是 show_memory_review。
+
+
+› 帮我看一下这几个新增文件在当前架构里分别负责什么。
+
+
+• 我先按当前工作区的新增文件来核对，确认具体是哪些文件，再结合现有分层说明它们在架构里的职责。
+
+• Ran git status --short
+  └  M .memory/_store/projections/boot.json
+     M .memory/_store/projections/search.json
+     M AGENTS.md
+     M skills/memory-admin/SKILL.md
+     M skills/project-memory/SKILL.md
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• 如果你指的是这轮里新增职责说明的这 3 个文件，它们在当前架构里的分工是这样的：
+
+  AGENTS.md 是最外层的仓库级治理规则。它不承载具体实现逻辑，负责定义硬边界和总路由，比如什么时候进入 project-memory、什么
+  时候只能走 memory-admin、durable memory 何时必须先读 system://boot、什么时候必须停在人工 review 分流。可以把它看成“全局
+  宪法层”。
+
+  skills/project-memory/SKILL.md 是主工作流编排层。它定义正常项目记忆场景该怎么读 docs/catalog/durable、什么时候切入
+  durable branch、统一写入口怎么走、pending review 怎么 handoff。也就是说，面向日常使用时，它是“主入口 orchestrator”。
+
+  skills/memory-admin/SKILL.md 是维护与诊断层。它不参与主 workflow，只负责 catalog-repair、session-extract、discover、索引/
+  投影诊断这类运维动作。你这次问“有没有新的规则、例外规则或 docs drift”就是它负责的范围。
+
+  放到 README 里那套五层架构中，就是：
+
+  - AGENTS.md：规则识别与硬边界层
+  - skills/project-memory/SKILL.md：统一项目记忆主入口层
+  - skills/memory-admin/SKILL.md：维护/诊断入口层
+
+  如果你说的“几个新增文件”不是这 3 个，把文件名发我，我按当前架构逐个拆。
+
+
+› 把这轮已经确认的规则整理成正式项目记忆，但先按正确流程处理，不要绕过审查。
+
+
+• 我按正式项目记忆流程来做：先从 project-memory 读现有项目知识，确认落点文档，然后通过统一写入口生成待审查的 docs change
+  review，只展示 review，不直接生效。
+
+• Called memory-hub.read_memory({"ref":"catalog://topics"})
+  └ {"ok": true, "code": "MEMORY_READ", "message": "Memory loaded.", "data": {"ref": "catalog://topics", "lane": "catalog",
+        "source_kind": "catalog", "target": "topics", "name": null, "content": "# Memory Hub — Topics Index\n\n## 代码模块
+        \n- core — 基础设施与仓库级行为接线：CLI 分发、JSON envelope、路径管理、规则入口、MCP/自测启动\n- memory — 知识管
+        理命令：init/read/list/search/index\n- catalog — 索引管理命令：read/update/repair\n- durable-memory — v2 主线 + de
+        cision discovery Phase 1：统一 read/search/capture/update/show review、本地 hybrid recall、boot/search projections
+        、session-extract 与 discover 候选发现\n- tests — 单元测试：核心模块与 durable memory ...
+
+• Called memory-hub.read_memory({"ref":"doc://pm/decisions"})
+  └ {"ok": true, "code": "MEMORY_READ", "message": "Memory loaded.", "data": {"ref": "doc://pm/decisions", "lane": "docs",
+        "source_kind": "doc", "bucket": "pm", "name": "decisions", "content": "# 需求结论与产品决策\n\n### 结论 1 — 2026-0
+        3-11\n背景：Phase 1F 完成后，Codex 路径的真实会话验收已基本符合预期；Claude 路径暂时搁置，不再阻塞当前版本收口。\n
+        结论：\n- 若暂不要求 Claude 的增强交互一并完成，则 durable-memory v1 MVP 可视为完成。\n- Codex 路径作为当前默认使
+        用路径。\n- 后续工作从“继续重构”切换为“真实使用 + 体验优化 + Claude 补验”。\n\n### 结论 2 — 2026-03-11\n背景：近期
+        收尾事项中的 review 队列清理、真实任务观察和 backlog 归类已完成，剩余问题已不再属于 MVP 阻塞项。\n结论：\n- review
+        队列清理完成后，当前 durable memory 状态可进入真实使用。\n- 真实任务观察通过后，boot-firs...
+
+• Called memory-hub.read_memory({"ref":"doc://dev/记忆相关写入必须经过统一写入口"})
+  └ {"ok": true, "code": "MEMORY_READ", "message": "Memory loaded.", "data": {"ref":
+        "doc://dev/记忆相关写入必须经过统一写入口", "lane": "docs", "source_kind": "doc", "bucket": "dev", "name": "记忆相
+        关写入必须经过统一写入口", "content": "# 记忆相关写入必须经过统一写入口\n\n所有记忆相关写入都必须经过统一写入口处
+        理，不能直接修改 docs lane 或 durable store。", "title": "记忆相关写入必须经过统一写入口"}, "degraded": false, "de
+        grade_reasons": []}
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• 我已经确认落点放在 doc://pm/decisions 最合适：这是新的产品/工作流结论，不是单纯实现细节。现在通过统一写入口生成 docs cha
+  nge review，然后把 review 内容展示给你，不执行批准。
+
+• Called
+  └ memory-hub.update_memory({"ref":"doc://pm/decisions","mode":"append","append":"\n\n### 结论 16 — 2026-03-12\n背景：
+        Phase 2F 引入 discovery lane 后，仓库已经具备从代码变更中发现规则候选的能力，但如果不把入口职责和适用边界继续收紧，
+        agent 仍可能把主工作流、维护动作和候选发现混在一起使用，导致用户心智和项目知识再次漂移。\n结论：\n- `project-
+        memory` 固定为统一项目记忆主入口，负责普通仓库知识读取、统一写入口路由，以及进入 durable branch 时的内部编排。\n-
+        `memory-admin` 固定为维护入口，只用于 `discover`、`session-extract`、`catalog-repair` 与诊断类动作，不参与普通项目
+        记忆主 workflow。\n- 当用户要判断“当前代码改动里是否出现新的规则、例外规则或 docs drift 候选”时，标准入口固定为
+        `memory-admin -> memory-hub discover`。\n- `discover` 只负责返回候选与证据，不直接写 active docs，也不直接写
+        approved durable state；后续沉淀仍必须回到既有 unified write lane 与 review surface。\n","reason":"将本轮确认的项目
+        记忆入口职责与 discovery 维护路径沉淀为正式项目知识，但先通过 docs review 审查，不直接生效。"})
+    {"ok": true, "code": "UPDATE_OK", "message": "Update completed.", "data": {"route": "docs-only", "docs_result": {"revi
+        ew_id": 8, "doc_ref": "doc://pm/decisions", "title": "decisions", "computed_diff": "--- before\n+++ after\n@@ -134
+        ,3 +134,12 @@\n 更后续版本：\n - 图结构、alias、多跳关系\n - 多租户、远程部署\n+\n+\n+### 结论 16 — 2026-03-12\n+
+        背景：Phase 2F 引入 discovery lane 后，仓库已经具备从代码变更中发现规则候选的能力，但如果不把入口职责和适用边界继
+        续收紧，agent 仍可能把主工作流、维护动作和候选发现混在一起使用，导致用户心智和项目知识再次漂移。\n+结论：\n+- `pro
+        ject-memory` 固定为统一项目记忆主入口，负责普通仓库知识读取、统一写入口路由，以及进入 durable branch 时的内部编排
+        。\n+- `memory-admin` 固定为维护入口，只用于 `discover`、`session-extract`...
+
+• Called memory-hub.show_memory_review({"ref":"doc://pm/decisions"})
+  └ {"ok": true, "code": "REVIEW_DETAIL_OK", "message": "Review detail loaded.", "data": {"review_id": 8, "ref":
+        "doc://pm/decisions", "lane": "docs", "review_kind": "docs_change_review", "doc_review": {"review_id": 8, "status":
+        "pending", "doc_ref": "doc://pm/decisions", "title": "decisions", "before_content": "# 需求结论与产品决策\n\n###
+        结论 1 — 2026-03-11\n背景：Phase 1F 完成后，Codex 路径的真实会话验收已基本符合预期；Claude 路径暂时搁置，不再阻塞
+        当前版本收口。\n结论：\n- 若暂不要求 Claude 的增强交互一并完成，则 durable-memory v1 MVP 可视为完成。\n- Codex 路
+        径作为当前默认使用路径。\n- 后续工作从“继续重构”切换为“真实使用 + 体验优化 + Claude 补验”。\n\n### 结论 2 — 2026-0
+        3-11\n背景：近期收尾事项中的 review ...
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• 已按正式流程处理，没有绕过审查。
+
+  我通过统一写入口为 doc://pm/decisions 创建了一个待审查的 docs change review，当前是 review_id: 8，状态 pending。这次没有
+  直接生效，只是进入 review 队列。
+
+  提议内容是新增“结论 16”，核心规则有 4 条：
+
+  - project-memory 固定为统一项目记忆主入口。
+  - memory-admin 固定为维护入口，只负责 discover、session-extract、catalog-repair 和诊断动作。
+  - 判断当前代码改动里是否有新规则、例外规则或 docs drift 候选时，标准入口固定为 memory-admin -> memory-hub discover。
+  - discover 只返回候选和证据，不直接写 active docs，也不直接写 approved durable state。
+
+  本次 review 的 diff 摘要是：
+
+  @@ -134,3 +134,12 @@
+   更后续版本：
+   - 图结构、alias、多跳关系
+   - 多租户、远程部署
+  +
+  +
+  +### 结论 16 — 2026-03-12
+  +背景：Phase 2F 引入 discovery lane 后，仓库已经具备从代码变更中发现规则候选的能力，但如果不把入口职责和适用边界继续收
+  紧，agent 仍可能把主工作流、维护动作和候选发现混在一起使用，导致用户心智和项目知识再次漂移。
+  +结论：
+  +- `project-memory` 固定为统一项目记忆主入口，负责普通仓库知识读取、统一写入口路由，以及进入 durable branch 时的内部编
+  排。
+  +- `memory-admin` 固定为维护入口，只用于 `discover`、`session-extract`、`catalog-repair` 与诊断类动作，不参与普通项目记忆
+  主 workflow。
+  +- 当用户要判断“当前代码改动里是否出现新的规则、例外规则或 docs drift 候选”时，标准入口固定为 `memory-admin -> memory-hub
+  discover`。
+  +- `discover` 只负责返回候选与证据，不直接写 active docs，也不直接写 approved durable state；后续沉淀仍必须回到既有
+  unified write lane 与 review surface。
+
+  如果你要继续下一步，现在可以基于这个 pending review 决定是否批准。

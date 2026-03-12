@@ -35,6 +35,16 @@ Primary workflow:
 - inspect `.memory/_store/projections/boot.json` and `search.json`
 - diagnose CLI / MCP behavior issues
 
+When this skill needs repository memory context, use the `memory-hub` MCP tools
+directly:
+
+- `read_memory(ref="catalog://topics")`
+- `read_memory(ref="doc://...")`
+- `search_memory(query, scope=docs|all, ...)`
+
+Do not treat `catalog://...` or `doc://...` as MCP resources. Do not call
+`read_mcp_resource`, and do not invent a server name such as `memory`.
+
 ## Session Distillation
 
 Use `memory-hub session-extract --file <session-transcript>` when the user asks

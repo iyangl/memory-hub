@@ -91,6 +91,8 @@ Before scoped change or feature work:
 
 Do not treat `catalog://...` or `doc://...` as MCP resources.
 Do not use `read_mcp_resource`, and do not invent a server name such as `memory`.
+If the host shows raw server/tool routing, the exact target must still be the
+`memory-hub` MCP server and its `read_memory` / `search_memory` tools.
 
 For memory writes in Codex/Claude:
 

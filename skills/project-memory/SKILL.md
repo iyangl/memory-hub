@@ -59,6 +59,19 @@ They are not MCP resources and should not be loaded with `read_mcp_resource`.
 Do not invent a server name such as `memory`; use the installed `memory-hub`
 tool surface directly.
 
+If the host UI exposes raw tool routing, the exact choice must still be:
+
+- server: `memory-hub`
+- tool: `read_memory` / `search_memory` / `capture_memory` / `update_memory` / `show_memory_review`
+
+Never convert:
+
+- `catalog://...`
+- `doc://...`
+- `system://...`
+
+into a resource read such as `read_mcp_resource(...)`.
+
 For the rest of this skill:
 
 - every `read_memory(...)`, `search_memory(...)`, `capture_memory(...)`,
@@ -77,6 +90,9 @@ For ordinary repository work:
 2. call `read_memory(ref="doc://...")` for the relevant docs refs
 3. if needed, call `search_memory(query, scope=docs|all, ...)`
 4. `scope=all` now uses local hybrid recall backed by `_store/projections/search.json`
+
+On memory-related repository questions, load `catalog://topics` first through
+the `memory-hub` MCP tool `read_memory(...)` before doing extra code retrieval.
 
 Do not enter durable-memory write flow for normal repository reading.
 
