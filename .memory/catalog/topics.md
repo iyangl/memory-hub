@@ -4,7 +4,7 @@
 - core — 基础设施与仓库级行为接线：CLI 分发、JSON envelope、路径管理、规则入口、MCP/自测启动
 - memory — 知识管理命令：init/read/list/search/index
 - catalog — 索引管理命令：read/update/repair
-- durable-memory — Phase 2F 自动会话提炼：project-memory 主 skill、统一 read/search/capture/update/show review、本地 hybrid recall、boot/search projections 与 session-extract 落 unified write lane
+- durable-memory — v2 主线 + decision discovery Phase 1：统一 read/search/capture/update/show review、本地 hybrid recall、boot/search projections、session-extract 与 discover 候选发现
 - tests — 单元测试：核心模块与 durable memory Phase 1A~Phase 2F 契约测试
 ## 知识文件
 ### tech-stack

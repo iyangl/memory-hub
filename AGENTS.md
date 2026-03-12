@@ -101,6 +101,9 @@ For memory writes in Codex/Claude:
   entrypoints only, not the default workflow
 - use `memory-hub session-extract --file <transcript>` only through the
   `memory-admin` maintenance path, not as a generic MCP action
+- use `memory-hub discover [--summary-file <path>]` only through the
+  `memory-admin` maintenance path when the user asks whether current code
+  changes contain new decision / exception / docs drift candidates
 
 When `.memory/` or catalog changes:
 

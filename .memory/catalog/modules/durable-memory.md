@@ -1,6 +1,6 @@
 # durable-memory
 
-> Phase 2F 自动会话提炼：project-memory 主 skill、统一 read/search/capture/update/show review、本地 hybrid recall、boot/search projections 与 session-extract 落 unified write lane
+> v2 主线 + decision discovery Phase 1：project-memory 主 skill、统一 read/search/capture/update/show review、本地 hybrid recall、boot/search projections、session-extract 与 discover 候选发现
 
 - skills/project-memory/SKILL.md — 统一项目记忆主入口：docs/catalog/durable/review 读取、检索、统一写入与会话提炼 handoff
 - skills/project-memory/SKILL.md — 内部 durable branch：boot-first、proposal/update/review handoff、pending review split 与确认分流
@@ -13,6 +13,11 @@
 - .archive/plans/2026-03-11-memory-hub-phase2d-plan.md — Phase 2D 实施方案：统一 review surface 与 docs 持久轻审查
 - .archive/plans/2026-03-11-memory-hub-phase2e-plan.md — Phase 2E 实施方案：boot/search 投影视图与本地 hybrid recall
 - .archive/plans/2026-03-11-memory-hub-phase2f-plan.md — Phase 2F 实施方案：本地会话提炼、候选路由与 unified write lane 落地
+- .archive/plans/2026-03-12-memory-hub-decision-discovery-lane-draft.md — decision discovery lane 方向草案：candidate discovery / 不自动生效
+- .archive/plans/2026-03-12-memory-hub-decision-discovery-phase1-plan.md — discovery Phase 1 开发计划：默认规则突破 / 新例外 / docs drift
+- lib/decision_discovery.py — discovery 主入口：汇总上下文、detector 输出、排序去重并生成 candidate 列表
+- lib/discovery_context.py — discovery 上下文读取：git diff、工作区 changed files、当前 docs/durable recall 投影
+- lib/discovery_signals.py — Phase 1 detector 集合：默认规则被打破、新例外规则、docs drift
 - lib/durable_db.py — SQLite schema bootstrap、连接与事务工具（store 位于 `.memory/_store/memory.db`）
 - lib/durable_errors.py — durable memory 领域错误类型
 - lib/durable_guard.py — 最小 write guard：NOOP、UPDATE_TARGET、PENDING_REVIEW

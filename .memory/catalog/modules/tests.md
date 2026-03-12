@@ -15,4 +15,5 @@
 - tests/test_memory_list_search.py — list/search 命令测试
 - tests/test_memory_read.py — read 命令测试
 - tests/test_paths.py — 路径工具测试
+- tests/test_decision_discovery.py — discovery Phase 1 测试：默认规则突破、新例外规则、docs drift 与噪音控制
 - tests/test_session_extract.py — Phase 2F 会话提炼候选、route 分类与 unified write 落地测试

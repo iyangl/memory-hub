@@ -102,6 +102,7 @@ memory-hub read <bucket> <file> [--anchor <heading>]
 memory-hub list <bucket>
 memory-hub search "<query>"
 memory-hub index <bucket> <file> --topic <name> --summary "<desc>"
+memory-hub discover [--summary-file <path>] [--limit <n>]
 memory-hub catalog-read [topics|<module>]
 memory-hub catalog-update --file <path-to-json>
 memory-hub catalog-repair
@@ -196,6 +197,7 @@ Phase 2F 后当前 MCP 仍暴露 7 个 tools：
 11. 只有在展示 proposal 详情后且用户明确确认时，agent 才可代理执行 CLI `review approve/reject`
 12. 必要时用 CLI `rollback`
 13. 需要把一次对话沉淀成候选时，通过 `memory-admin` 运行 `memory-hub session-extract --file <transcript>`；提炼出的 docs / durable / dual-write 候选仍然只会进入既有 unified write lane 与 review surface，不会直接写 active state
+14. 需要判断“这次代码改动里有没有新的规则、例外规则或 docs drift 候选”时，通过 `memory-admin` 运行 `memory-hub discover [--summary-file <path>]`；该命令只返回候选，不会直接写 active docs 或 approved durable state
 
 `search_memory` 当前返回的关键元数据包括：
 
@@ -255,6 +257,13 @@ Phase 2F 会话提炼冒烟可直接执行：
 
 ```bash
 memory-hub session-extract --file ./session.txt
+```
+
+Decision discovery 冒烟可直接执行：
+
+```bash
+memory-hub discover
+memory-hub discover --summary-file ./summary.txt
 ```
 
 会话级行为验收见：

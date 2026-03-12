@@ -12,6 +12,7 @@ COMMANDS = {
     "list": "lib.memory_list",
     "search": "lib.memory_search",
     "index": "lib.memory_index",
+    "discover": "lib.discovery_cli",
     "catalog-read": "lib.catalog_read",
     "catalog-update": "lib.catalog_update",
     "catalog-repair": "lib.catalog_repair",

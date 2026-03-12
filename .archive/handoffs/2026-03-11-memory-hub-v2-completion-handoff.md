@@ -394,3 +394,35 @@ Claude 增强交互仍可延后，不阻塞当前 v2 使用。
 
 - v2 已经具备“安全地记”
 - 但下一阶段若继续增强，最值得做的是“更可靠地发现该记什么”
+
+## 13. decision discovery lane 立项状态
+
+截至 2026-03-12，decision discovery lane 已进入正式规划阶段。
+
+当前已落地的产物：
+
+- 设计草案：
+  - `.archive/plans/2026-03-12-memory-hub-decision-discovery-lane-draft.md`
+- 产品决策：
+  - `.memory/docs/pm/decisions.md` 中新增“结论 15”
+
+当前冻结的方向：
+
+- discovery lane 不是自动写入层，而是 `candidate discovery` 层
+- 它只负责发现候选、给出理由、并路由到现有 docs review / durable review
+- 第一阶段只优先抓三类高价值信号：
+  - 默认规则被打破
+  - 新例外规则出现
+  - docs 与实现发生偏离
+
+当前还没有开始实现：
+
+- 代码 diff 规则发现器
+- candidate 结构化输出面
+- 与 unified write lane 的自动接线
+
+因此，换电脑后如果继续这条线，应该从：
+
+- `.archive/plans/2026-03-12-memory-hub-decision-discovery-lane-draft.md`
+
+作为下一轮实现入口，而不是再从 v2 主线文档重新梳理。

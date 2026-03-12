@@ -106,6 +106,18 @@
 - 若遇到旧状态异常，优先显式报错并给出手动清理、重建或重新初始化指引，而不是继续叠加迁移补丁。
 - 可以保留最小的内部 schema 演进机制，但不再把 migrate / compatibility 作为产品能力或主文档承诺。
 
+### 结论 15 — 2026-03-12
+背景：Phase 2F 之后，系统已经具备统一写入、统一审查和统一 recall，但仍然明显依赖“会话中已经被表达出来的知识”才能稳定沉淀。对于只隐含在代码修改、默认规则突破或局部例外中的重要决策，当前系统仍存在遗漏风险。
+结论：
+- 下一阶段应新增 `decision discovery lane`，作为“candidate discovery”层，而不是直接增强自动写入。
+- discovery lane 的职责是：从代码变更、现有 docs/default 规则、会话结论中发现高价值候选，并路由到现有 docs review / durable review。
+- discovery lane 不直接写 active docs 或 approved durable state，不新增独立状态机。
+- 第一阶段优先抓三类高价值信号：
+  - 默认规则被打破
+  - 新例外规则出现
+  - docs 与实现发生偏离
+  不追求从任意代码 diff 中归纳一切高层意图。
+
 ### Post-MVP Backlog 分层
 
 v1.x 体验优化：
