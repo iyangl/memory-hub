@@ -1,1396 +1,241 @@
+ 我们来讨论一个流程问题，抛开规则和实现。                                                                                 
+  当用户一个自然语言的提问，提交到你时，你应该做的流程是什么？如何完美的利用这个工具？                                 
+  从分析语义到检索开始，简单说下流程                                                                                       
+                                                                                                                           
+⏺ 好问题。让我从纯流程角度思考，不纠结具体规则。                                                                           
+                                         
+  理想的处理流程                                                                                                           
+   
+  阶段 1：语义分析与任务分类                                                                                               
+                                                            
+  输入：用户的自然语言问题
 
-• Model changed to gpt-5.4 medium
+  做什么：
+  1. 识别任务类型
+    - 规则发现？代码理解？功能开发？维护诊断？
+  2. 识别任务范围
+    - 单文件？多模块？架构级？
+  3. 识别所需知识
+    - 需要项目背景吗？需要历史决策吗？需要约束条件吗？
 
+  输出：任务分类 + 所需知识类型
 
-› 你先帮我快速理解一下，这个项目现在的记忆系统是怎么分层的，我后面要继续开发。
-
-
-• 我先按仓库规则走一遍项目记忆入口和代码语义检索，快速确认 .memory/ 文档层、durable store，以及实际代码里的分层和调用关系。
-
-• Called memory.read_mcp_resource({"server":"memory","uri":"catalog://topics"})
-  └ Error: resources/read failed: unknown MCP server 'memory'
-
-• Explored
-  └ Read SKILL.md
-
-• Called
-  └ ace-tool.codebase-retrieval({"information_request":"理解 memory-hub 项目当前“记忆系统”的分层架构。请定位并总结：1)
-        `.memory/` docs lane 相关读写/索引代码；2) durable memory store 或 memory.db 相关控制层；3) 统一入口、路由层、
-        catalog/topics/index/repair 流程；4) 这些层之间的边界、数据流、主要模块与关键符号；5) 如果存在 CLI 或 MCP 暴露面，
-        也请指出入口文件和调用链。请尽量给出文件路径、核心类型/函数名、以及它们之间的关系。"})
-    The following code sections were retrieved:
-    Path: .memory/catalog/topics.md
-         1	# Memory Hub — Topics Index
-         2	
-         3	## 代码模块
-         4	- core — 基础设施与仓库级行为接线：CLI 分发、JSON envelope、路径管理、规则入口、MCP/自测启动
-         5	- memory — 知识管理命令：init/read/list/search/index
-         6	- catalog — 索引管理命令：read/update/repair
-         7	- durable-memory — Phase 2F 自动会话提炼：project-memory 主 skill、统一 read/search/capture/update/show review、
-        本地 hybrid recall、boot/search projections 与 session-extract 落 unified write lane
-         8	- tests — 单元测试：核心模块与 durable memory Phase 1A~Phase 2F 契约测试
-         9	## 知识文件
-        10	### tech-st...
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-■ Conversation interrupted - tell the model what to do differently. Something went wrong? Hit `/feedback` to report the
-issue.
-
-/mcp
-
-🔌  MCP Tools
-
-  • ace-tool
-    • Status: enabled
-    • Auth: Unsupported
-    • Command: auggie --mcp
-    • Env: AUGMENT_API_TOKEN=*****, AUGMENT_API_URL=*****
-    • Tools: codebase-retrieval
-    • Resources: (none)
-    • Resource templates: (none)
-
-  • memory-hub
-    • Status: enabled
-    • Auth: Unsupported
-    • Command: /Users/sunpure/Documents/Code/memory-hub/bin/memory-hub-mcp
-    • Env: MEMORY_HUB_PROJECT_ROOT=*****
-    • Tools: capture_memory, propose_memory, propose_memory_update, read_memory, search_memory, show_memory_review,
-update_memory
-    • Resources: (none)
-    • Resource templates: (none)
-
-  • sequential-thinking
-    • Status: enabled
-    • Auth: Unsupported
-    • Command: npx -y @modelcontextprotocol/server-sequential-thinking
-    • Tools: sequentialthinking
-    • Resources: (none)
-    • Resource templates: (none)
-
-^C%                                                                                                                        
-codex
-
-Updating Codex via `npm install -g @openai/codex`...
-
-changed 2 packages in 30s
-
-🎉 Update ran successfully! Please restart Codex.
-codex
-
-╭──────────────────────────────────────────────╮
-│ >_ OpenAI Codex (v0.114.0)                   │
-│                                              │
-│ model:     gpt-5.4 medium   /model to change │
-│ directory: ~/Documents/Code/memory-hub       │
-╰──────────────────────────────────────────────╯
-
-  Tip: New Try the Codex App with 2x rate limits until April 2nd. Run 'codex app' or visit
-  https://chatgpt.com/codex?app-landing-page=true
-
-
-› 你先帮我快速理解一下，这个项目现在的记忆系统是怎么分层的，我后面要继续开发。
-
-
-• 我先按仓库规则走一遍项目记忆入口和代码检索，确认这个项目当前“记忆系统”的分层、边界和主要流转，再给你一个可继续开发用的高
-  层地图。
-
-• Called
-  └ ace-tool.codebase-retrieval({"information_request":"请概览这个仓库中“记忆系统”的分层结构。重点找出：1) docs lane /
-        durable memory / catalog / review queue 的代码入口与边界；2) .memory 目录和 memory-hub MCP 工具在项目中的角色；3)
-        负责读写、检索、proposal/review handoff、catalog repair 的核心模块与文件；4) 如果我要继续开发功能，应该先理解哪些模
-        块。请给出尽量具体的文件和符号。"})
-    The following code sections were retrieved:
-    Path: .memory/catalog/modules/durable-memory.md
-    ...
-         4	
-         5	- skills/project-memory/SKILL.md — 统一项目记忆主入口：docs/catalog/durable/review 读取、检索、统一写入与会话提炼
-        handoff
-         6	- skills/project-memory/SKILL.md — 内部 durable branch：boot-first、proposal/update/review handoff、pending
-        review split 与确认分流
-         7	- skills/memory-admin/SKILL.md — 维护入口：repair / diagnose / session-extract
-         8	- .archive/plans/2026-03-10-phase1f-behavior-acceptance.md — Phase 1F 会话级行为验收清单
-         9	- .archive/handoffs/2026-03-10-phase1f-durable-memory-behavior-handoff.md —...
-
-• Called memory-hub.read_memory({"ref":"system://boot"})
-  └ {"ok": true, "code": "MEMORY_READ", "message": "Memory loaded.", "data": {"ref": "system://boot", "lane": "system", "s
-        ource_kind": "boot", "generated_at": "2026-03-11T09:23:17Z", "projection_path": ".memory/_store/projections/boot.j
-        son", "items": [{"uri": "constraint://durable-memory-requires-proposal-and-human-review", "type": "constraint", "s
-        torage_lane": "durable", "doc_ref": null, "title": "Durable memory requires proposal and human review", "content":
-        "durable memory 不允许直写，必须经过 `propose -> review -> approve/reject` 工作流。长期记忆的生效必须由人工通过审
-        查流程确认，不能跳过 proposal，也不能绕过 review 直接写入 appr...
-
-• Ran pwd && rg --files .memory src tests | sed 's#^./##' | head -200
-  └ rg: src: No such file or directory (os error 2)
-    .memory/manifest.json
-    … +28 lines
-    .memory/docs/qa/qa-strategy.md
-    .memory/docs/pm/decisions.md
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 我已经拿到项目自己的 catalog 和 boot 投影视图。下一步我会把“分层”落到具体模块：统一读面、统一写面、docs lane、durable
-  lane、review 面，以及它们之间的 handoff。
-
-• Called memory-hub.read_memory({"ref":"catalog://topics"})
-  └ {"ok": true, "code": "MEMORY_READ", "message": "Memory loaded.", "data": {"ref": "catalog://topics", "lane": "catalog",
-        "source_kind": "catalog", "target": "topics", "name": null, "content": "# Memory Hub — Topics Index\n\n## 代码模块
-        \n- core — 基础设施与仓库级行为接线：CLI 分发、JSON envelope、路径管理、规则入口、MCP/自测启动\n- memory — 知识管
-        理命令：init/read/list/search/index\n- catalog — 索引管理命令：read/update/repair\n- durable-memory — Phase 2F 自
-        动会话提炼：project-memory 主 skill、统一 read/search/capture/update/show review、本地 hybrid recall、boot/search
-        projections 与 session-extract 落 unified write lane\n- tests — 单元测试：核心模块与 dura...
-
-• Called memory-hub.read_memory({"ref":"doc://architect/decisions"})
-  └ {"ok": true, "code": "MEMORY_READ", "message": "Memory loaded.", "data": {"ref": "doc://architect/decisions", "lane":
-        "docs", "source_kind": "doc", "bucket": "architect", "name": "decisions", "content": "# 设计决策日志\n\n### 决策 1
-        — 2026-02-26\n背景：`memory-hub write` 通过 stdin/heredoc 传入内容，AI agent 调用时频繁出错（isatty 检测失败、here
-        doc 格式化错误、shell 转义问题）。`catalog-update` 同样依赖 stdin 传 JSON。\n方案：\n- A: 拆分为 AI 直接写文件 + `
-        memory-hub index` 只管索引注册；`catalog-update` 改为 `--file` 参数 ← 选择\n- B: 保留 `write` 但增加 `--file` 参数
-        （一条命令包办写文件 + 更新索引）\n- C: 保留 stdin 方案，优化 SKILL.md 提示让 AI 更好地使用 heredoc\n选择原因：A
-        最符合\"脚本是执行器，AI...
-
-• Called memory-hub.read_memory({"ref":"doc://pm/decisions"})
-  └ {"ok": true, "code": "MEMORY_READ", "message": "Memory loaded.", "data": {"ref": "doc://pm/decisions", "lane": "docs",
-        "source_kind": "doc", "bucket": "pm", "name": "decisions", "content": "# 需求结论与产品决策\n\n### 结论 1 — 2026-0
-        3-11\n背景：Phase 1F 完成后，Codex 路径的真实会话验收已基本符合预期；Claude 路径暂时搁置，不再阻塞当前版本收口。\n
-        结论：\n- 若暂不要求 Claude 的增强交互一并完成，则 durable-memory v1 MVP 可视为完成。\n- Codex 路径作为当前默认使
-        用路径。\n- 后续工作从“继续重构”切换为“真实使用 + 体验优化 + Claude 补验”。\n\n### 结论 2 — 2026-03-11\n背景：近期
-        收尾事项中的 review 队列清理、真实任务观察和 backlog 归类已完成，剩余问题已不再属于 MVP 阻塞项。\n结论：\n- review
-        队列清理完成后，当前 durable memory 状态可进入真实使用。\n- 真实任务观察通过后，boot-firs...
-
-• Explored
-  └ Read README.md, project_memory_view.py, project_memory_write.py
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 现在可以确认这个系统不是“两个互不相干的存储”，而是“一个统一入口，底下两条存储 lane，加一个 review/control 面”。我再补一下
-  review 与 projection 两块，这样你后面改功能时能直接判断该落哪一层。
-
-• Explored
-  └ Read project_memory_projection.py, project_review.py, paths.py, durable_mcp_tools.py
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 现在这个项目的“记忆系统”可以按 3 个维度理解：物理分层、行为分层、工作流分层。
-
-  1. 物理分层
-  最底层其实只有一个统一根目录 .memory/，但里面分成两条 lane：
-
-  - docs lane：.memory/docs/，存正式项目知识文档，按 pm / architect / dev / qa 分 bucket。paths.py:7 README.md
-  - catalog lane：.memory/catalog/，给 docs 做索引，不是独立知识源，更像目录层。paths.py:17 README.md
-  - durable lane：.memory/_store/memory.db，存长期记忆控制面数据，不是 docs 的替代正文库。README.md doc://pm/decisions 对
-    应内容
-  - projection lane：.memory/_store/projections/boot.json 和 search.json，是为了 boot / search 做的投影视图，不是权威主存。
-    project_memory_projection.py
-
-  一句话总结：docs 是正式文档面，catalog 是目录面，memory.db 是 durable 控制面，projections 是读取/检索加速面。
-
-  2. 行为分层
-  行为上已经被收口成“统一入口，内部多 lane”：
-
-  - 统一读面：read_project_memory() 能读 system://boot、doc://...、catalog://...、durable URI。project_memory_view.py:99
-  - 统一检索面：search_project_memory() 走 hybrid_search()，可以查 docs、durable 或 all。project_memory_view.py:140
-    project_memory_projection.py:148
-  - 统一写面：capture_memory() / update_memory() 先决定 route，再分别进入 docs review 或 durable proposal。
-    project_memory_write.py
-  - 统一 review 面：project_review.py 把 docs_change_review 和 durable_review 合并成一个 review surface。project_review.py
-
-  所以你后面开发时，不该把“记忆系统”理解成 docs 功能和 durable 功能两套平行产品，而是一个统一 project-memory surface，下沉
-  到不同 lane。
+  阶段 2：上下文装配
 
-  3. 工作流分层
-  这层最关键，因为它决定“什么该写哪”：
-
-  - docs-only：只进 docs review，批准后落 docs + catalog。project_memory_write.py:89
-  - durable-only：只进 durable proposal/review，不能直写 approved memory。project_memory_write.py:65
-  - dual-write：docs 是正文，durable 只存摘要/长期记忆，并通过 doc_ref 关联。project_memory_write.py:108
+  基于阶段 1 的判断：
 
-  这正对应项目现在的核心决策：docs lane 是正式项目知识主文档；DB 只承担最小控制面，不当统一正文主库。.memory/docs/pm/
-  decisions.md
+  如果需要项目知识
 
-  你继续开发时，建议先抓这 5 个模块
+  1. 读 catalog://topics
+     → 快速定位：哪些 docs 相关
 
-  - 统一读：lib/project_memory_view.py
-  - 统一写：lib/project_memory_write.py
-  - 统一 review：lib/project_review.py
-  - 投影与检索：lib/project_memory_projection.py
-  - MCP 暴露面：lib/durable_mcp_tools.py
+  2. 读相关 doc://...
+     → 获取具体知识：设计决策、约束、约定
 
-  如果你要快速建立完整心智，最有效的顺序是：
+  3. 如果 docs 不够
+     → search_memory(scope=docs|all)
+     → 补充相关上下文
 
-  1. 先看 README.md
-  2. 再看 .memory/docs/pm/decisions.md 和 .memory/docs/architect/decisions.md
-  3. 最后顺着 project_memory_view -> project_memory_write -> project_review -> project_memory_projection
+  如果是规则发现任务
 
-  如果你愿意，我下一步可以直接按“读取链路 / 写入链路 / review 链路”把调用链再拆成一张开发地图。
+  1. 先读 catalog + 相关 docs（理解现有规则）
+  2. 执行 discover（自动发现候选）
+  3. 人工补充分析（discover 的盲区）
 
+  如果是纯代码理解
 
-› 补充一条项目知识：以后凡是改 memory 相关逻辑，都必须补自动化测试和自测记录。
+  1. 读 catalog 定位模块
+  2. 读代码文件
+  3. 必要时读相关 docs 补充设计背景
 
+  输出：完整的任务上下文
 
-• 我把这条作为项目级约束写入统一记忆流，走 dual-write：docs 留正式规则，durable 留跨会话约束提醒。写入后我会把 review 摘要
-  展示出来，等你明确确认是否批准。
+  阶段 3：执行任务
 
-• Called
-  └ memory-hub.capture_memory({"kind":"auto","title":"Memory 相关逻辑变更必须补自动化测试和自测记录","content":"凡是修改
-        memory 相关逻辑，必须同时补齐对应的自动化测试，并留下可复现的自测记录。没有测试和自测记录的 memory 逻辑改动，不能视
-        为完成。","reason":"补充项目开发约束，确保后续所有 memory 相关改动都有自动化验证与人工自测痕
-        迹。","doc_domain":"qa","memory_type":"constraint","recall_when":"当准备修改 memory 相关逻辑、评审相关变更是否完
-        成、或决定是否可以在无测试情况下合入时回忆。","why_not_in_code":"这是开发流程约束与完成定义，无法从代码本身稳定推
-        断。"})
-    {"ok": true, "code": "CAPTURE_OK", "message": "Capture completed.", "data": {"route": "dual-write", "docs_result": {"r
-        eview_id": 4, "doc_ref": "doc://qa/memory-相关逻辑变更必须补自动化测试和自测记录", "title": "Memory 相关逻辑变更必
-        须补自动化测试和自测记录", "computed_diff": "--- before\n+++ after\n@@ -0,0 +1,3 @@\n+# Memory 相关逻辑变更必须补
-        自动化测试和自测记录\n+\n+凡是修改 memory 相关逻辑，必须同时补齐对应的自动化测试，并留下可复现的自测记录。没有测试
-        和自测记录的 memory 逻辑改动，不能视为完成。", "linked_proposal_id": 10, "status": "pending"}, "review_kind": "doc
-        s_change_review", "review_ref": "doc://qa/memory-相关逻辑变更必须补自动化测试和自测记录", "durable_result": {"code
-        ": "PROPOSAL_CREATED", "proposal_i...
+  基于阶段 2 的上下文：
 
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  - 如果是分析任务 → 分析并回答
+  - 如果是开发任务 → 设计 + 实现
+  - 如果是发现任务 → 发现 + 归类 + 建议
+  - 如果是维护任务 → 执行工具 + 验证
 
-• 这条约束已经进入 pending review：一个 docs change review，联动一个 durable proposal。按项目规则，下一步先展示 review 详
-  情，再由你明确选择是否批准。
+  输出：任务结果
 
-• Called memory-hub.show_memory_review({"ref":"doc://qa/memory-相关逻辑变更必须补自动化测试和自测记录"})
-  └ {"ok": true, "code": "REVIEW_DETAIL_OK", "message": "Review detail loaded.", "data": {"review_id": 4, "ref":
-        "doc://qa/memory-相关逻辑变更必须补自动化测试和自测记录", "lane": "docs", "review_kind": "docs_change_review", "do
-        c_review": {"review_id": 4, "status": "pending", "doc_ref":
-        "doc://qa/memory-相关逻辑变更必须补自动化测试和自测记录", "title": "Memory 相关逻辑变更必须补自动化测试和自测记录",
-        "before_content": "", "after_content": "# Memory 相关逻辑变更必须补自动化测试和自测记录\n\n凡是修改 memory 相关逻
-        辑，必须同时补齐对应的自动化测试，并留下可复现的自测记录。没有测试和自测记录的 memory 逻辑改动，不能视为完成。", "
-        reason": "补充项目开发约束，确保后续所有 memory 相关改动都有自动化验证与人工自测痕迹。", "linked_proposal_id": 10,
-        "created_at": ...
+  阶段 4：知识沉淀判断
 
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  问自己：
+  1. 这次任务产生了新知识吗？
+    - 新决策？新约束？新约定？
+  2. 这个知识应该记录吗？
+    - 会影响未来任务吗？
+    - 代码里读不出来吗？
+  3. 应该记录在哪里？
+    - docs（项目规则）？
+    - durable（跨会话提醒）？
+    - 两者都要（dual-write）？
 
-• 已创建一条 pending review。
+  如果需要记录：
+  1. 通过统一写入口
+     → capture_memory(kind=auto|docs|durable)
 
-  摘要：
+  2. 进入 review 流程
+     → show_memory_review
+     → 等待用户确认
 
-  - docs review：doc://qa/memory-相关逻辑变更必须补自动化测试和自测记录
-  - linked durable proposal：proposal_id=10
-  - 规则内容：凡是修改 memory 相关逻辑，必须补自动化测试和可复现的自测记录，否则不算完成
+  3. 用户批准后生效
 
-  当前还没生效，需要你明确选择其一：
+  输出：知识已记录 / 无需记录
 
-  - 批准此提案
-  - 拒绝此提案
-  - 暂不处理
+  ---
+  关键点
 
+  1. 语义分析是第一步
 
-› 批准此提案
+  不要：看到问题就开始读文件、执行命令
 
+  应该：先判断这是什么类型的任务，需要什么知识
 
-• 我现在按 review 流程执行批准，并确认 docs review 与关联的 durable proposal 是否同步生效。随后把结果直接回报给你。
+  例如：
+  - "这次改动有没有新规则" → 规则发现任务
+  - "这个文件做什么" → 代码理解任务
+  - "帮我实现登录功能" → 功能开发任务
 
-• Ran python3 -m lib.cli review approve doc://qa/memory-相关逻辑变更必须补自动化测试和自测记录 --reviewer codex --note 'us
-  │ er approved'
-  └ {
-      "ok": true,
-    … +23 lines
-      "message": "Proposal approved."
-    }
+  2. 上下文装配要精准
 
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  不要：盲目读一堆文件
 
-• 已批准并生效。
+  应该：
+  - 先读 catalog 定位
+  - 再读相关 docs
+  - 最后才是搜索补充
 
-  结果：
+  类比：
+  - catalog = 图书馆目录
+  - docs = 具体书籍
+  - search = 全文检索
 
-  - docs 已落盘到 .memory/docs/qa/memory-相关逻辑变更必须补自动化测试和自测记录.md
-  - 关联的 durable memory 已同步批准，URI 为 constraint://memory
-  - catalog 已同步注册，repair 结果为空，没有额外修复动作
+  3. 工具选择要匹配任务
 
-  后续我会按这条约束执行：凡是改 memory 相关逻辑，必须补自动化测试和自测记录。
+  规则发现 → discover（自动） + 人工分析（补充）
 
+  代码理解 → catalog + docs + 代码阅读
 
-› 再补充一点：这类改动的验证标准至少要包括 pytest -q 和一轮端到端自测。
+  功能开发 → catalog + docs + 设计 + 实现
 
+  维护诊断 → 直接执行维护工具
 
-• 我把这条补成现有约束的增量更新，走统一写入口更新 constraint://memory。先创建 review，再把摘要给你确认。
+  4. 知识沉淀要主动判断
 
-• Called
-  └ memory-hub.update_memory({"ref":"constraint://memory","mode":"append","append":"\n\n这类改动的验证标准至少要包括
-        `pytest -q`，以及一轮端到端自测。","reason":"补充 memory 相关逻辑改动的最低验证标准，明确至少需要 pytest -q 和一轮
-        端到端自测。","recall_when":"当准备修改 memory 相关逻辑、评审相关变更是否完成、或决定是否可以在验证不充分的情况下合
-        入时回忆。","why_not_in_code":"这是开发流程约束与验收标准，无法从代码本身稳定推断。"})
-    {"ok": true, "code": "UPDATE_OK", "message": "Update completed.", "data": {"route": "dual", "durable_result": {"code":
-        "PROPOSAL_CREATED", "proposal_id": 11, "proposal_kind": "update", "target_uri": "constraint://memory", "base_versi
-        on_id": 4, "status": "pending"}}, "degraded": false, "degrade_reasons": []}
+  不要：等用户说"记录一下"
 
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  应该：任务结束后主动判断
+  - 产生了新知识吗？
+  - 应该记录吗？
+  - 记录在哪里？
 
-• 更新提案已经创建，是对现有 durable 约束的 append proposal。按规则先展示 review 明细，再由你决定是否批准。
+  ---
+  这次任务的理想流程
 
-• Called memory-hub.show_memory_review({"proposal_id":11})
-  └ {"ok": true, "code": "REVIEW_DETAIL_OK", "message": "Review detail loaded.", "data": {"proposal_id": 11, "ref":
-        "constraint://memory", "lane": "durable", "review_kind": "durable_review", "proposal": {"proposal_id": 11, "propos
-        al_kind": "update", "status": "pending", "target_uri": "constraint://memory", "base_version_id": 4, "type": "const
-        raint", "title": "Memory 相关逻辑变更必须补自动化测试和自测记录", "content": "凡是修改 memory 相关逻辑，必须同时补
-        齐对应的自动化测试，并留下可复现的自测记录。没有测试和自测记录的 memory 逻辑改动，不能视为完成。\n\n这类改动的验证
-        标准至少要包括 `pytest -q`，以及一轮端到端自测。", "content_hash": "964108a8cc9fa24273ca2a35b55b0eb02b394c874c4308
-        63e01b0...
+  用户问："这次改动有没有新规则、例外规则、文档偏离"
 
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  应该做的
 
-• 已创建一条 pending update review，目标是 constraint://memory。
+  1. 语义分析
+     → 这是"规则发现"任务
+     → 需要：现有规则上下文 + git diff 分析
 
-  增量内容：
+  2. 上下文装配
+     → read_memory(catalog://topics)
+     → read_memory(doc://dev/记忆相关写入必须经过统一写入口)
+     → 理解现有规则基线
 
-  - 在现有约束后追加：这类改动的验证标准至少要包括 pytest -q，以及一轮端到端自测。
+  3. 执行任务
+     → python3 -m lib.cli discover
+     → 返回 0 候选
+     → 补充人工分析（discover 不识别文档规则变化）
 
-  当前还没生效，需要你明确选择其一：
+  4. 知识沉淀判断
+     → 发现了规则问题
+     → 但这是"规则本身的问题"，不是"新规则"
+     → 应该修复规则，而不是记录为新知识
 
-  - 批准此提案
-  - 拒绝此提案
-  - 暂不处理
+  我实际做的
 
+  1. 语义分析 ❌
+     → 误判为"普通分析"
 
-› 批准此提案
+  2. 上下文装配 ⚠️
+     → 跳过了 catalog（违反规则）
+     → 后来补上了
 
+  3. 执行任务 ⚠️
+     → 没有执行 discover
+     → 直接人工分析
 
-• 我现在执行批准，并确认这次 dual lane 更新是否同时刷新 docs 侧内容。完成后直接给你结果。
+  4. 知识沉淀判断 ✅
+     → 判断为"修复规则"
+     → 执行了修复
 
-• Ran python3 -m lib.cli review approve 11 --reviewer codex --note 'user approved'
-  └ {
-      "ok": true,
-    … +10 lines
-      "message": "Proposal approved."
-    }
+  ---
+  完美利用工具的关键
 
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  1. catalog 是导航系统
 
-• 已批准，constraint://memory 已从 version 4 更新到 version 5。
+  作用：快速定位相关知识
 
-  补充说明：这次我是对 durable 侧的 constraint://memory 做增量更新并批准，规则内容已经在长期记忆里生效。对应的 docs 文件这
-  次没有同步生成新的 docs review，所以 .memory/docs/qa/memory-相关逻辑变更必须补自动化测试和自测记录.md 目前仍是上一版。后
-  续我会按最新约束执行：memory 相关改动至少要跑 pytest -q 和一轮端到端自测。
+  使用时机：几乎所有需要项目知识的任务
 
+  不用的情况：纯代码阅读、已知具体文件路径
 
-› 记住一个长期偏好：除非我明确要求，否则后续都优先用中文回复我。
+  2. docs 是知识库
 
+  作用：提供设计决策、约束、约定
 
-• 我把这条作为长期偏好写入 durable memory，走 durable-only。先创建 review，再把提案摘要给你确认是否批准。
+  使用时机：需要理解"为什么这样设计"
 
-• Called
-  └ memory-hub.capture_memory({"kind":"durable","title":"默认使用中文回复","content":"除非用户明确要求使用其他语言，否则默
-        认使用中文回复。","reason":"记录用户的长期语言偏好，减少后续会话中的语言切换歧
-        义。","memory_type":"preference","recall_when":"当准备回复用户、选择输出语言、或用户未明确指定语言时回
-        忆。","why_not_in_code":"这是用户个人偏好，不会稳定体现在代码或仓库文件中。"})
-    {"ok": true, "code": "CAPTURE_OK", "message": "Capture completed.", "data": {"route": "durable-only", "durable_result":
-        {"code": "PROPOSAL_CREATED", "proposal_id": 12, "proposal_kind": "create", "status": "pending", "target_uri":
-        "preference://item", "guard_decision": "PENDING_REVIEW"}}, "degraded": false, "degrade_reasons": []}
+  不用的情况：纯执行性任务（如 catalog-repair）
 
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  3. search 是补充手段
 
-• 提案已经创建。按规则先展示 review 详情，再由你明确选择是否批准。
+  作用：当 catalog + docs 不够时，全文检索
 
-• Called memory-hub.show_memory_review({"proposal_id":12})
-  └ {"ok": true, "code": "REVIEW_DETAIL_OK", "message": "Review detail loaded.", "data": {"proposal_id": 12, "ref":
-        "preference://item", "lane": "durable", "review_kind": "durable_review", "proposal": {"proposal_id": 12, "proposal
-        _kind": "create", "status": "pending", "target_uri": "preference://item", "base_version_id": null, "type": "prefer
-        ence", "title": "默认使用中文回复", "content": "除非用户明确要求使用其他语言，否则默认使用中文回复。", "content_ha
-        sh": "635205a18c182e1ea652f9f8ffd3fcdada0c8418c27e9e9f2bc22451e52ba054", "recall_when": "当准备回复用户、选择输出
-        语言、或用户未明确指定语言时回忆。", "why_not_in_code": "这是用户个人偏好，不会稳定体现在代码或仓库文件中。"...
+  使用时机：
+  - 不确定知识在哪个 doc
+  - 需要跨 docs 的关联信息
+  - 需要 durable memory 的历史决策
 
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  4. discover 是自动发现
 
-• 已创建一条 pending preference proposal。
+  作用：从 git diff 中识别规则候选
 
-  摘要：
+  使用时机：用户明确问"有没有新规则/例外/drift"
 
-  - 提案：proposal_id=12
-  - 目标 URI：preference://item
-  - 内容：除非你明确要求其他语言，否则默认用中文回复
+  局限：不识别纯文档规则变化，需要人工补充
 
-  当前还没生效，需要你明确选择其一：
+  5. 统一写入口是记录通道
 
-  - 批准此提案
-  - 拒绝此提案
-  - 暂不处理
+  作用：将新知识记录到 docs 或 durable
 
+  使用时机：任务产生了值得记录的新知识
 
-› 批准此提案
+  不用的情况：纯查询、纯分析、临时性结论
 
+  ---
+  一句话总结
 
-• 我现在执行批准，把这条语言偏好写入 durable memory。完成后直接回报结果。
+  理想流程：
+  语义分析（判断任务类型）
+    ↓
+  上下文装配（catalog → docs → search）
+    ↓
+  执行任务（匹配工具 + 人工分析）
+    ↓
+  知识沉淀（判断是否记录 + 统一写入口）
 
-• Ran python3 -m lib.cli review approve 12 --reviewer codex --note 'user approved'
-  └ {
-      "ok": true,
-    … +10 lines
-      "message": "Proposal approved."
-    }
+  核心原则：
+  - 先理解任务，再选工具
+  - 先定位知识，再深入阅读
+  - 先自动发现，再人工补充
+  - 先判断价值，再记录沉淀
 
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 已批准并生效。
-
-  结果：
-
-  - 提案 12 已批准
-  - durable memory URI：preference://item
-  - 生成版本：6
-
-  后续除非你明确要求其他语言，否则我会默认用中文回复。
-
-
-› 这个偏好再补充一下：如果术语太多，可以保留英文术语，但解释还是优先中文。
-
-
-• 我把这条作为对现有语言偏好的增量更新写入 durable memory。先创建 review，再把内容给你确认。
-
-• Called
-  └ memory-hub.update_memory({"ref":"preference://item","mode":"append","append":"\n\n如果术语较多，可以保留英文术语，但解
-        释仍优先使用中文。","reason":"补充用户的语言表达偏好，允许保留英文术语，同时保持中文解释为默认。","recall_when":"当
-        准备回复用户、选择输出语言和术语表达方式、或需要在中英文之间取舍时回忆。","why_not_in_code":"这是用户个人偏好，不会
-        稳定体现在代码或仓库文件中。"})
-    {"ok": true, "code": "UPDATE_OK", "message": "Update completed.", "data": {"route": "durable", "durable_result": {"cod
-        e": "PROPOSAL_CREATED", "proposal_id": 13, "proposal_kind": "update", "target_uri": "preference://item", "base_ver
-        sion_id": 6, "status": "pending"}}, "degraded": false, "degrade_reasons": []}
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 更新提案已创建，是对 preference://item 的 append proposal。按规则先展示 review 明细，再由你决定是否批准。
-
-• Called memory-hub.show_memory_review({"proposal_id":13})
-  └ {"ok": true, "code": "REVIEW_DETAIL_OK", "message": "Review detail loaded.", "data": {"proposal_id": 13, "ref":
-        "preference://item", "lane": "durable", "review_kind": "durable_review", "proposal": {"proposal_id": 13, "proposal
-        _kind": "update", "status": "pending", "target_uri": "preference://item", "base_version_id": 6, "type": "preferenc
-        e", "title": "默认使用中文回复", "content": "除非用户明确要求使用其他语言，否则默认使用中文回复。\n\n如果术语较多
-        ，可以保留英文术语，但解释仍优先使用中文。", "content_hash": "d8b0cd49b45714c5b59925c496f6f55860d102b48c9de27bf189
-        214529db2467", "recall_when": "当准备回复用户、选择输出语言和术语表达方式、或需要在中英文之间取舍时回忆。", "why_n
-        ot_i...
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 已创建一条 pending update review，目标是 preference://item。
-
-  增量内容：
-
-  - 如果术语较多，可以保留英文术语，但解释仍优先使用中文。
-
-  当前还没生效，需要你明确选择其一：
-
-  - 批准此提案
-  - 拒绝此提案
-  - 暂不处理
-
-
-› 批准此提案
-
-
-• 我现在执行批准，把这条语言表达偏好更新到现有长期偏好里。完成后直接给你结果。
-
-• Ran python3 -m lib.cli review approve 13 --reviewer codex --note 'user approved'
-  └ {
-      "ok": true,
-    … +10 lines
-      "message": "Proposal approved."
-    }
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 已批准并生效。
-
-  结果：
-
-  - 提案 13 已批准
-  - durable memory URI 仍为 preference://item
-  - 版本从 6 更新到 7
-
-  后续默认规则是：除非你明确要求其他语言，否则我优先用中文回复；如果术语很多，可以保留英文术语，但解释仍优先中文。
-
-
-› 有一条重要约束需要记下来：所有记忆相关写入都必须经过统一写入口，不能直接改 docs 或 store。
-
-
-• 我把这条作为项目级约束写入统一记忆流，走 dual-write：docs 留规则文档，durable 留长期约束。先创建 review，再把摘要给你确
-  认。
-
-• Called
-  └ memory-hub.capture_memory({"kind":"auto","title":"记忆相关写入必须经过统一写入口","content":"所有记忆相关写入都必须经过
-        统一写入口处理，不能直接修改 docs lane 或 durable store。","reason":"补充项目关键约束，确保后续记忆相关写入都遵循统
-        一路由和审查流程。","doc_domain":"dev","memory_type":"constraint","recall_when":"当准备写入项目记忆、评估是否可以直
-        接修改 docs 或 store、或设计记忆相关写入流程时回忆。","why_not_in_code":"这是项目流程约束与操作边界，无法仅从代码实
-        现中稳定推断。"})
-    {"ok": true, "code": "CAPTURE_OK", "message": "Capture completed.", "data": {"route": "dual-write", "docs_result": {"r
-        eview_id": 5, "doc_ref": "doc://dev/记忆相关写入必须经过统一写入口", "title": "记忆相关写入必须经过统一写入口", "c
-        omputed_diff": "--- before\n+++ after\n@@ -0,0 +1,3 @@\n+# 记忆相关写入必须经过统一写入口\n+\n+所有记忆相关写入都
-        必须经过统一写入口处理，不能直接修改 docs lane 或 durable store。", "linked_proposal_id": 14, "status": "pending"},
-        "review_kind": "docs_change_review", "review_ref": "doc://dev/记忆相关写入必须经过统一写入口", "durable_result": {
-        "code": "PROPOSAL_CREATED", "proposal_id": 14, "proposal_kind": "create", "status": "pending"}}, "deg...
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 提案已经进入 pending review。按规则先展示 review 详情，再由你明确决定是否批准。
-
-• Called memory-hub.show_memory_review({"ref":"doc://dev/记忆相关写入必须经过统一写入口"})
-  └ {"ok": true, "code": "REVIEW_DETAIL_OK", "message": "Review detail loaded.", "data": {"review_id": 5, "ref":
-        "doc://dev/记忆相关写入必须经过统一写入口", "lane": "docs", "review_kind": "docs_change_review", "doc_review": {"r
-        eview_id": 5, "status": "pending", "doc_ref": "doc://dev/记忆相关写入必须经过统一写入口", "title": "记忆相关写入必
-        须经过统一写入口", "before_content": "", "after_content": "# 记忆相关写入必须经过统一写入口\n\n所有记忆相关写入都
-        必须经过统一写入口处理，不能直接修改 docs lane 或 durable store。", "reason": "补充项目关键约束，确保后续记忆相关
-        写入都遵循统一路由和审查流程。", "linked_proposal_id": 14, "created_at": "2026-03-11T09:45:53Z", "created_by": "mc
-        p", "reviewed_at": null, "revie...
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 已创建一条 pending review。
-
-  摘要：
-
-  - docs review：doc://dev/记忆相关写入必须经过统一写入口
-  - linked durable proposal：proposal_id=14
-  - 规则内容：所有记忆相关写入都必须经过统一写入口处理，不能直接修改 docs lane 或 durable store
-
-  当前还没生效，需要你明确选择其一：
-
-  - 批准此提案
-  - 拒绝此提案
-  - 暂不处理
-
-
-› 批准此提案
-
-
-• 我现在执行批准，确认 docs 与关联 durable 约束同步生效。完成后把结果直接回报给你。
-
-• Ran python3 -m lib.cli review approve doc://dev/记忆相关写入必须经过统一写入口 --reviewer codex --note 'user approved'
-  └ {
-      "ok": true,
-    … +23 lines
-      "message": "Proposal approved."
-    }
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 已批准并生效。
-
-  结果：
-
-  - docs 已落盘到 .memory/docs/dev/记忆相关写入必须经过统一写入口.md
-  - 关联 durable memory 已同步批准，URI 为 constraint://item
-  - catalog 已同步注册，没有额外 repair 动作
-
-  后续所有记忆相关写入，我都会优先走统一写入口，不会直接改 docs 或 store。
-
-
-› 再补一句：即使只是修正文案，只要属于项目记忆，也不能绕开统一写入口。
-
-
-• 我把这句作为现有“统一写入口”约束的增量更新写入 durable memory。先创建 review，再把摘要给你确认。
-
-• Called
-  └ memory-hub.update_memory({"ref":"constraint://item","mode":"append","append":"\n\n即使只是修正文案，只要属于项目记忆，
-        也不能绕开统一写入口。","reason":"补充统一写入口约束，明确项目记忆类文案修正也必须走统一写入口。","recall_when":"当
-        准备写入项目记忆、评估是否可以直接修改 docs 或 store、或判断轻微文案修正是否可绕过统一流程时回
-        忆。","why_not_in_code":"这是项目流程约束与操作边界，无法仅从代码实现中稳定推断。"})
-    {"ok": true, "code": "UPDATE_OK", "message": "Update completed.", "data": {"route": "dual", "durable_result": {"code":
-        "PROPOSAL_CREATED", "proposal_id": 15, "proposal_kind": "update", "target_uri": "constraint://item", "base_version
-        _id": 8, "status": "pending"}}, "degraded": false, "degrade_reasons": []}
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 更新提案已创建，是对 constraint://item 的 append proposal。按规则先展示 review 明细，再由你决定是否批准。
-
-• Called memory-hub.show_memory_review({"proposal_id":15})
-  └ {"ok": true, "code": "REVIEW_DETAIL_OK", "message": "Review detail loaded.", "data": {"proposal_id": 15, "ref":
-        "constraint://item", "lane": "durable", "review_kind": "durable_review", "proposal": {"proposal_id": 15, "proposal
-        _kind": "update", "status": "pending", "target_uri": "constraint://item", "base_version_id": 8, "type": "constrain
-        t", "title": "记忆相关写入必须经过统一写入口", "content": "所有记忆相关写入都必须经过统一写入口处理，不能直接修改
-        docs lane 或 durable store。\n\n即使只是修正文案，只要属于项目记忆，也不能绕开统一写入口。", "content_hash": "be19
-        582d5b628cdac39681120f285f6475aa23279791d4d100befac1b03d5436", "recall_when": "当准备写入项目记忆、评估是...
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 已创建一条 pending update review，目标是 constraint://item。
-
-  增量内容：
-
-  - 即使只是修正文案，只要属于项目记忆，也不能绕开统一写入口。
-
-  当前还没生效，需要你明确选择其一：
-
-  - 批准此提案
-  - 拒绝此提案
-  - 暂不处理
-
-
-› 批准此提案
-
-
-• 我现在执行批准，把这条补充约束写入现有长期约束。完成后直接给你结果。
-
-• Ran python3 -m lib.cli review approve 15 --reviewer codex --note 'user approved'
-  └ {
-      "ok": true,
-    … +10 lines
-      "message": "Proposal approved."
-    }
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 已批准并生效。
-
-  结果：
-
-  - 提案 15 已批准
-  - durable memory URI 仍为 constraint://item
-  - 版本从 8 更新到 9
-
-  后续即使只是修正文案，只要属于项目记忆，我也会走统一写入口，不会直接改 docs 或 store。
-
-
-› 再记一条：涉及 memory 设计调整时，应该先更新 .memory/docs/pm/decisions.md 再改实现。
-
-
-• 我把这条落成项目级流程约束，并优先写到 doc://pm/decisions 的变更提案里，这样符合你要求的“先更新 decisions 再改实现”。先
-  创建 review，再把摘要给你确认。
-
-• Called
-  └ memory-hub.update_memory({"ref":"doc://pm/decisions","mode":"append","append":"\n\n### 结论 15 — 2026-03-11\n背景：
-        memory 相关功能仍在持续迭代，如果先改实现、后补项目决策文档，容易再次出现实现、规则和文档漂移。\n结论：\n- 涉及
-        memory 设计调整时，应先更新 `.memory/docs/pm/decisions.md`，再开始修改实现。\n- 若决策文档尚未更新，则该类实现改动
-        不应视为进入正式实施阶段。\n","reason":"补充 memory 设计调整的执行顺序约束，先更新 pm decisions，再改实现，避免设计
-        与实现漂移。","recall_when":"当准备调整 memory 设计、修改相关实现、或判断设计变更是否已经具备实施前提时回
-        忆。","why_not_in_code":"这是项目流程约束与实施顺序要求，无法仅从代码实现中稳定推断。"})
-    {"ok": true, "code": "UPDATE_OK", "message": "Update completed.", "data": {"route": "docs-only", "docs_result": {"revi
-        ew_id": 6, "doc_ref": "doc://pm/decisions", "title": "decisions", "computed_diff": "--- before\n+++ after\n@@ -122
-        ,3 +122,10 @@\n 更后续版本：\n - 图结构、alias、多跳关系\n - 多租户、远程部署\n+\n+\n+### 结论 15 — 2026-03-11\n+
-        背景：memory 相关功能仍在持续迭代，如果先改实现、后补项目决策文档，容易再次出现实现、规则和文档漂移。\n+结论：\n+-
-        涉及 memory 设计调整时，应先更新 `.memory/docs/pm/decisions.md`，再开始修改实现。\n+- 若决策文档尚未更新，则该类实
-        现改动不应视为进入正式实施阶段。", "linked_proposal_id": null, "status": "pending"}, "review_kind": "docs_change_r
-        eview", "review_ref": "do...
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 这次生成的是 doc://pm/decisions 的 docs review，没有自动关联 durable 约束。先把 review 明细展示出来，你确认后我再批准。
-
-• Called memory-hub.show_memory_review({"ref":"doc://pm/decisions"})
-  └ {"ok": true, "code": "REVIEW_DETAIL_OK", "message": "Review detail loaded.", "data": {"review_id": 6, "ref":
-        "doc://pm/decisions", "lane": "docs", "review_kind": "docs_change_review", "doc_review": {"review_id": 6, "status":
-        "pending", "doc_ref": "doc://pm/decisions", "title": "decisions", "before_content": "# 需求结论与产品决策\n\n###
-        结论 1 — 2026-03-11\n背景：Phase 1F 完成后，Codex 路径的真实会话验收已基本符合预期；Claude 路径暂时搁置，不再阻塞
-        当前版本收口。\n结论：\n- 若暂不要求 Claude 的增强交互一并完成，则 durable-memory v1 MVP 可视为完成。\n- Codex 路
-        径作为当前默认使用路径。\n- 后续工作从“继续重构”切换为“真实使用 + 体验优化 + Claude 补验”。\n\n### 结论 2 — 2026-0
-        3-11\n背景：近期收尾事项中的 review ...
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 已创建一条 pending docs review，目标是 doc://pm/decisions。
-
-  增量内容：
-
-  - 涉及 memory 设计调整时，应先更新 .memory/docs/pm/decisions.md，再开始修改实现
-  - 如果决策文档还没更新，这类实现改动不算正式进入实施阶段
-
-  当前还没生效，需要你明确选择其一：
-
-  - 批准此提案
-  - 拒绝此提案
-  - 暂不处理
-
-
-› 暂不处理
-
-
-• 这条提案先保持 pending，不做批准或拒绝。
-
-  当前状态：
-
-  - review 目标：doc://pm/decisions
-  - review_id：6
-
-  在你后续明确批准前，这条约束还没有正式生效。
-
-
-› 刚才那条规则再补充一点：如果牵涉到接口变更，还要同步更新 roadmap 和设计草案。
-
-
-• 我先按统一写入口尝试把补充内容追加到 doc://pm/decisions。如果该文档已有 pending review，系统应该把我分流到现有 review，
-  而不是继续叠加修改。
-
-• Called
-  └ memory-hub.update_memory({"ref":"doc://pm/decisions","mode":"append","append":"\n- 如果设计调整牵涉到接口变更，还应同步
-        更新 roadmap 和设计草案。\n","reason":"补充 memory 设计调整的执行顺序约束，明确接口变更还需要同步更新 roadmap 和设
-        计草案。","recall_when":"当准备调整 memory 设计、修改相关实现、判断设计变更是否已经具备实施前提、或评估接口变更影响
-        面时回忆。","why_not_in_code":"这是项目流程约束与实施顺序要求，无法仅从代码实现中稳定推断。"})
-    {"ok": true, "code": "UPDATE_OK", "message": "Update completed.", "data": {"route": "pending-review", "review_id": 6,
-        "review": {"review_id": 6, "ref": "doc://pm/decisions", "lane": "docs", "review_kind": "docs_change_review", "doc_
-        review": {"review_id": 6, "status": "pending", "doc_ref": "doc://pm/decisions", "title": "decisions", "before_cont
-        ent": "# 需求结论与产品决策\n\n### 结论 1 — 2026-03-11\n背景：Phase 1F 完成后，Codex 路径的真实会话验收已基本符合
-        预期；Claude 路径暂时搁置，不再阻塞当前版本收口。\n结论：\n- 若暂不要求 Claude 的增强交互一并完成，则 durable-memo
-        ry v1 MVP 可视为完成。\n- Codex 路径作为当前默认使用路径。\n- 后续工作从“继续重构”切换为“真实使用 + 体验优化 + Cla
-        ude 补验”。\n\...
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 这条补充目前没法直接并进，因为 doc://pm/decisions 已经有一个 pending review，系统按规则把写入分流回现有 review 6，没有创
-  建新的增量提案。
-
-  当前状态：
-
-  - pending review：doc://pm/decisions
-  - review_id：6
-  - 现有 pending 内容只包含“先更新 .memory/docs/pm/decisions.md 再改实现”，还不包含你刚补的“接口变更还要同步更新 roadmap 和
-    设计草案”
-
-  要把新补充正式记进去，得先处理这条 pending review，再发起一次新的更新。现在你前面选择的是“暂不处理”，所以我不会绕过这条规
-  则继续写。
-
-
-› 拒绝此提案
-
-
-• 我现在把 doc://pm/decisions 这条 pending review 拒绝掉，清掉队列里的阻塞项。然后你刚才补充的版本我可以再按新的内容重新发
-  起。
-
-• Ran python3 -m lib.cli review reject doc://pm/decisions --reviewer codex --note 'user rejected'
-  └ {
-      "ok": true,
-    … +9 lines
-      "message": "Proposal rejected."
-    }
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 已拒绝并清理掉这条 pending review。
-
-  结果：
-
-  - review_id：6
-  - 目标：doc://pm/decisions
-  - 状态：rejected
-
-  这样 pm/decisions 上已经没有这条阻塞中的 pending 变更了。
-
-
-› 你总结一下，这个项目现在关于“记忆写入纪律”有哪些明确规则？
-
-
-• 现在已经明确生效的“记忆写入纪律”主要有 4 条。
-
-  1. 所有记忆相关写入都必须走统一写入口，不能直接修改 docs lane 或 durable store。这条已经写入 .memory/docs/dev/记忆相关写
-     入必须经过统一写入口.md，并同步进入 durable constraint。
-  2. 即使只是修正文案，只要属于项目记忆，也不能绕开统一写入口。这条是上面那条约束的已批准补充，当前在 durable memory 中已生
-     效。
-  3. 以后凡是改 memory 相关逻辑，必须补自动化测试和可复现的自测记录，否则不能算完成。对应 docs 在 .memory/docs/qa/memory-相
-     关逻辑变更必须补自动化测试和自测记录.md。
-  4. 这类改动的最低验证标准，至少包括一轮 pytest -q 和一轮端到端自测。这条已经作为对前一条约束的 durable 更新生效。
-
-  另外还有两条与执行方式直接相关的长期偏好，也会影响我后续怎么处理这些写入：
-
-  - 默认用中文回复；术语多时可以保留英文术语，但解释优先中文。
-  - 这些长期偏好本身也已经按 review 流程写入 durable memory。
-
-  有一条你提过但目前“不生效”：
-
-  - “涉及 memory 设计调整时，应先更新 .memory/docs/pm/decisions.md 再改实现；如果涉及接口变更，还要同步更新 roadmap 和设计
-    草案。”
-    这条对应的 doc://pm/decisions 提案后来被你明确拒绝了，所以它现在不是正式规则。
-
-  如果只压缩成一句话，这个项目当前的写入纪律就是：
-  凡是项目记忆写入，一律经由统一写入口；凡是 memory 逻辑改动，一律带测试和自测，最低标准是 pytest -q 加一轮端到端自测。
-
-
-› 后面你回答我时，语言风格上现在有没有已经确认的长期偏好？
-
-
-• 有，已经确认并生效的长期偏好有两条，都是语言风格相关：
-
-  1. 除非你明确要求其他语言，否则默认优先用中文回复。
-  2. 如果术语很多，可以保留英文术语，但解释仍优先中文。
-
-  这两条都已经写入 durable memory，当前是正式生效状态。
-
-
-› 把我们这段关于 v2 设计、统一记忆入口、docs 和 durable 分工的讨论整理成候选记忆，但先不要直接生效。
-
-
-• 我把这段整理成一条候选项目记忆，走统一写入口但停在 pending review，不会直接生效。内容会覆盖 v2 设计基线、统一记忆入口，以
-  及 docs / durable 的职责分工。
-
-• Called
-  └ memory-hub.capture_memory({"kind":"auto","title":"v2 统一项目记忆面与 docs durable 分工","content":"v2 的项目记忆系统采
-        用统一入口而非并列产品面。`project-memory` 是统一项目记忆主入口，负责读取、检索、写入路由与 review handoff；
-        `memory-admin` 负责 repair、diagnose、session-extract 等维护动作。\n\n在存储职责上，`.memory/docs/` 是正式项目知识
-        主文档；`.memory/catalog/` 是 docs 的索引与目录层；`.memory/_store/memory.db` 是 durable memory 的最小控制面；
-        `_store/projections/boot.json` 与 `search.json` 提供 boot 和 hybrid recall 的投影视图。\n\n在写入职责上，`docs-
-        only` 进入 docs review，批准后落 docs 与 catalog；`durable-only` 进入 durable proposal/review；`dual-write` 以 docs
-        为正文主文档，durable 只保存摘要或长期约束，并通过 `doc_ref` 关联。DB 不应重新成为所有知识的正文主
-        库。","reason":"整理本次关于 v2 设计、统一记忆入口以及 docs durable 分工的讨论，形成后续可审查的候选项目记
-        忆。","doc_domain":"architect","memory_type":"decision","recall_when":"当继续开发 v2 统一项目记忆系统、判断功能应落
-        在哪条 lane、设计 unified write/read/review flow、或解释 docs 与 durable 分工时回忆。","why_not_in_code":"这是跨模
-        块的设计结论与产品边界说明，不能从单个实现文件中稳定恢复全貌。"})
-    {"ok": true, "code": "CAPTURE_OK", "message": "Capture completed.", "data": {"route": "dual-write", "docs_result": {"r
-        eview_id": 7, "doc_ref": "doc://architect/v2-统一项目记忆面与-docs-durable-分工", "title": "v2 统一项目记忆面与 do
-        cs durable 分工", "computed_diff": "--- before\n+++ after\n@@ -0,0 +1,7 @@\n+# v2 统一项目记忆面与 docs durable 分
-        工\n+\n+v2 的项目记忆系统采用统一入口而非并列产品面。`project-memory` 是统一项目记忆主入口，负责读取、检索、写入路
-        由与 review handoff；`memory-admin` 负责 repair、diagnose、session-extract 等维护动作。\n+\n+在存储职责上，`.memor
-        y/docs/` 是正式项目知识主文档；`.memory/catalog/` 是 docs 的索引与目录层；`.memory/_store/memory.db` 是 durable me
-        mory 的最小控制面；`...
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 候选记忆已经创建，但还停在 pending review，没有生效。我先把 review 摘要展示给你，后续你要批准、拒绝还是继续保留 pending
-  都可以。
-
-• Called memory-hub.show_memory_review({"ref":"doc://architect/v2-统一项目记忆面与-docs-durable-分工"})
-  └ {"ok": true, "code": "REVIEW_DETAIL_OK", "message": "Review detail loaded.", "data": {"review_id": 7, "ref":
-        "doc://architect/v2-统一项目记忆面与-docs-durable-分工", "lane": "docs", "review_kind": "docs_change_review", "doc
-        _review": {"review_id": 7, "status": "pending", "doc_ref": "doc://architect/v2-统一项目记忆面与-docs-durable-分工",
-        "title": "v2 统一项目记忆面与 docs durable 分工", "before_content": "", "after_content": "# v2 统一项目记忆面与 do
-        cs durable 分工\n\nv2 的项目记忆系统采用统一入口而非并列产品面。`project-memory` 是统一项目记忆主入口，负责读取、
-        检索、写入路由与 review handoff；`memory-admin` 负责 repair、diagnose、session-extract 等维护动作。\n\n在存储职责
-        上，`.memor...
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 已经整理成候选记忆，并且停在 pending review，没有直接生效。
-
-  当前候选：
-
-  - docs review：doc://architect/v2-统一项目记忆面与-docs-durable-分工
-  - linked durable proposal：proposal_id=16
-
-  内容覆盖了这几件事：
-
-  - v2 采用统一项目记忆入口，project-memory 是主入口，memory-admin 是维护入口
-  - .memory/docs/ 是正式项目知识主文档，.memory/catalog/ 是索引层
-  - .memory/_store/memory.db 是 durable 的最小控制面，boot/search projection 负责 recall 视图
-  - docs-only / durable-only / dual-write 三种写入分工，以及 DB 不应重新变成正文主库
-
-  现在它只是候选，还没生效。
-
-
-› 拒绝此提案
-
-
-• 我现在把这条候选记忆拒绝掉，保持它不生效，也清掉对应的 pending review。
-
-• Ran python3 -m lib.cli review reject doc://architect/v2-统一项目记忆面与-docs-durable-分工 --reviewer codex --note 'user
-  │ rejected'
-  └ {
-      "ok": true,
-    … +13 lines
-      "message": "Proposal rejected."
-    }
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 已拒绝并清理完成。
-
-  结果：
-
-  - docs review 7 已拒绝
-  - 目标：doc://architect/v2-统一项目记忆面与-docs-durable-分工
-  - 关联 durable proposal 16 也已同步拒绝
-
-  这条候选记忆现在不会生效。
-
-
-› 看一下当前 lib 目录下和 review surface 相关的实现结构，帮我说说主要模块分工。
-
-
-• 我先按仓库规则看 lib 下与 review surface 相关的实现链路，重点梳理统一 review 视图、docs review、durable review、CLI/MCP
-  接线这几层的模块分工，再给你一个结构化总结。
-
-• Called
-  └ ace-tool.codebase-retrieval({"information_request":"请梳理当前 lib 目录下与 review surface 相关的实现结构。重点找出：1)
-        统一 review surface 的入口模块；2) docs change review 的服务/存储/应用逻辑；3) durable proposal review 的服务/存储/
-        审批逻辑；4) CLI 与 MCP 如何接线到 review surface；5) 如果要继续开发 review UI/summary/diff，应先看哪些文件和符号。
-        请给出具体文件和函数。"})
-    The following code sections were retrieved:
-    Path: .memory/catalog/modules/durable-memory.md
-    ...
-        13	- .archive/plans/2026-03-11-memory-hub-phase2d-plan.md — Phase 2D 实施方案：统一 review surface 与 docs 持久轻审
-        查
-        14	- .archive/plans/2026-03-11-memory-hub-phase2e-plan.md — Phase 2E 实施方案：boot/search 投影视图与本地 hybrid
-        recall
-        15	- .archive/plans/2026-03-11-memory-hub-phase2f-plan.md — Phase 2F 实施方案：本地会话提炼、候选路由与 unified
-        write lane 落地
-        16	- lib/durable_db.py — SQLite schema bootstrap、连接与事务工具（store 位于 `.memory/_store/memory.db`）
-        17	- lib/durable_errors.py — durable memory 领域错误类型
-        ...
-
-• Called memory-hub.read_memory({"ref":"catalog://modules/durable-memory"})
-  └ {"ok": true, "code": "MEMORY_READ", "message": "Memory loaded.", "data": {"ref": "catalog://modules/durable-memory", "
-        lane": "catalog", "source_kind": "catalog", "target": "module", "name": "durable-memory", "content": "# durable-me
-        mory\n\n> Phase 2F 自动会话提炼：project-memory 主 skill、统一 read/search/capture/update/show review、本地 hybrid
-        recall、boot/search projections 与 session-extract 落 unified write lane\n\n- skills/project-memory/SKILL.md — 统
-        一项目记忆主入口：docs/catalog/durable/review 读取、检索、统一写入与会话提炼 handoff\n- skills/project-memory/SKIL
-        L.md — 内部 durable branch：boot-first、proposal/update/rev...
-
-• Explored
-  └ Search review|docs_change_review|approve_review|reject_review|show_review_summary|list_pending_reviews|
-approve_proposal|
-           reject_proposal|approve_doc_review|reject_doc_review in lib
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 当前 lib 里和 review surface 相关的结构，核心是“一个统一 review facade，下面接两条 review lane，再往下接 CLI/MCP 两个入
-  口”。
-
-  总体分层
-
-  - 统一 review surface：lib/project_review.py
-  - docs review lane：lib/docs_review.py
-  - durable review lane：lib/durable_review.py
-  - proposal/detail 查询仓储：lib/durable_repo.py
-  - review 持久化 schema：lib/durable_db.py
-  - review CLI 入口：lib/review_cli.py
-  - review MCP 入口：lib/durable_mcp_tools.py
-  - 写入阶段进入 review 的路由：lib/project_memory_write.py
-
-  1. 统一 review facade
-  lib/project_review.py 是 review surface 的中枢层，职责很明确：
-
-  - list_pending_reviews()：把 durable proposals 和 docs change reviews 合并成一个 pending 列表。
-  - show_review_summary()：统一输出 review detail；根据 proposal_id 或 ref 分流到 durable 或 docs。
-  - approve_review() / reject_review()：统一审批入口，再分发到底层 lane。
-
-  这里还负责“展示层结构统一”：
-
-  - durable review 走 _show_durable_review()，输出 proposal/current_memory/base_version/computed_diff
-  - docs review 走 _show_docs_review()，输出 doc_review/computed_diff/linked_durable_review
-
-  如果你后面要改 review summary 的返回结构、diff 展示字段、统一列表排序，这个文件是第一入口。
-
-  2. docs review lane
-  lib/docs_review.py 负责 docs change review 的完整生命周期：
-
-  - 查询：
-      - get_pending_doc_review_by_ref()
-      - get_doc_review_by_id()
-      - list_pending_doc_reviews()
-  - 创建：
-      - create_doc_review()
-  - 审批：
-      - approve_doc_review()
-  - 拒绝：
-      - reject_doc_review()
-
-  它的特点是“docs review 真正会落文件”：
-
-  - 批准时把 after_content 写回 docs 文件
-  - 然后调用 ensure_doc_registered() 同步 catalog
-  - 如果是 dual-write docs review，还会顺手批准 linked_proposal_id 对应的 durable proposal
-  - 最后刷新 projection
-
-  所以 docs review 不只是审查展示，它本身也是 docs active state 的应用器。
-
-  3. durable review lane
-  lib/durable_review.py 负责 durable proposal 的审批事务：
-
-  - approve_proposal()：把 proposal 内容写成新 version，并 upsert approved memory，再写 audit
-  - reject_proposal()：只改 proposal 状态并写 audit
-  - rollback_memory()：durable-only 的回滚路径
-
-  这一层不关心统一 surface，也不关心 docs 文件，只关心 DB 内 proposal/version/approved/audit 的原子事务。
-  如果你要改 durable 审批规则、版本推进、audit 记录，这里是主战场。
-
-  4. 仓储和 schema 支撑
-  两个底层支撑模块：
-
-  - lib/durable_repo.py
-      - 给 review facade 提供 get_proposal_detail()、list_pending_proposals()
-      - 也负责 create/update proposal 的插入逻辑
-  - lib/durable_db.py
-      - 定义 docs_change_reviews 表
-      - 也定义 durable proposal/version/approved 等表
-      - 提供 connect() / transaction() / ensure_schema()
-
-  所以可以把 repo 理解成“读模型/写模型仓储”，db 理解成“schema + 连接事务层”。
-
-  5. review surface 如何接到写入流
-  lib/project_memory_write.py 是 review surface 的上游入口，不直接负责审批，但决定“什么东西进入哪种 review”：
-
-  - capture_memory() / update_memory() 先判定 route：docs-only / durable-only / dual-write
-  - docs 相关写入调用 create_doc_review()
-  - durable 相关写入调用 proposal insert
-  - 如果目标已经有 pending review/proposal，会通过 _pending_handoff() 返回 pending-review，并直接调用 show_review_summary()
-
-  所以这个模块负责“进入 review surface 前的路由与分流”。
-
-  6. CLI 和 MCP 如何接线
-  CLI：
-
-  - lib/review_cli.py
-  - 只是薄封装，命令有 list/show/approve/reject
-  - 解析参数后直接调用 lib/project_review.py 的统一接口
-
-  MCP：
-
-  - lib/durable_mcp_tools.py
-  - review 相关主要是 show_memory_review_tool()
-  - 它内部也是直接调 show_review_summary()
-  - 真正的 JSON-RPC 路由在 lib/mcp_server.py
-
-  也就是说，CLI 和 MCP 都没有自己的一套 review 逻辑，它们只是不同 transport，真正的业务面都收在 project_review.py 以及两条
-  lane service 里。
-
-  如果你后面要继续开发 review surface
-  优先看这几个点：
-
-  - 改统一 review 输出结构：lib/project_review.py
-  - 改 docs review 的状态机、落盘、副作用：lib/docs_review.py
-  - 改 durable proposal 审批、版本推进：lib/durable_review.py
-  - 改 review 是如何从写入流进入 pending 的：lib/project_memory_write.py
-  - 改 CLI/MCP surface：lib/review_cli.py 和 lib/durable_mcp_tools.py
-
-  一句话总结：
-  这个项目的 review surface 设计并不复杂，核心就是 project_review.py 做统一门面，docs_review.py 和 durable_review.py 各自负
-  责 lane 内事务，CLI/MCP 只是把这套统一门面暴露出去。
-
-
-› 今天天气不错，我们继续把这个项目往下做。
-
-
-• 继续。你下一步给我具体目标，我直接按当前规则推进：统一写入口、memory 相关改动补测试、至少跑 pytest -q 和一轮端到端自测。
-^C%                                                                                                                        
-codex
-
-╭──────────────────────────────────────────────╮
-│ >_ OpenAI Codex (v0.114.0)                   │
-│                                              │
-│ model:     gpt-5.4 medium   /model to change │
-│ directory: ~/Documents/Code/memory-hub       │
-╰──────────────────────────────────────────────╯
-
-  Tip: New Use /fast to enable our fastest inference at 2X plan usage.
-
-
-› 帮我看一下这次改动里，有没有形成新的规则、例外规则，或者文档已经偏离实现的地方。
-
-
-• 这次我按“记忆维护/漂移检查”来做，先走 memory-admin 和 project-memory 的读取流程，确认项目记忆与当前改动的关联范围，再检查
-  本地改动里是否出现了新的规则、例外规则，或文档与实现偏离。
-
-• Explored
-  └ Read SKILL.md
-
-• Called
-  └ ace-tool.codebase-retrieval({"information_request":"需要为当前仓库做一次‘改动是否形成新规则/例外规则/文档漂移’检查。请
-        先给出与项目记忆、catalog、docs lane、memory discover/repair workflow、以及可能受本次改动影响的实现模块相关的代码与
-        文档位置，特别是：1) 负责 catalog/topics/docs 读取与更新的实现；2) 负责 discover / drift / decision extraction 的实
-        现或命令入口；3) 任何与规则、约束、例外、decision log、docs drift 判定相关的模块、schema、测试。请返回关键文件和符
-        号，便于后续精读与验证调用链。"})
-    Failed to retrieve codebase information: HTTP error: 401 Unauthorized
-
-• Called memory.read_mcp_resource({"server":"memory","uri":"catalog://topics"})
-  └ Error: resources/read failed: unknown MCP server 'memory'
-
-■ Conversation interrupted - tell the model what to do differently. Something went wrong? Hit `/feedback` to report the
-issue.
-^C%                                                                                                                        
-codex
-
-╭──────────────────────────────────────────────╮
-│ >_ OpenAI Codex (v0.114.0)                   │
-│                                              │
-│ model:     gpt-5.4 medium   /model to change │
-│ directory: ~/Documents/Code/memory-hub       │
-╰──────────────────────────────────────────────╯
-
-  Tip: New Try the Codex App with 2x rate limits until April 2nd. Run 'codex app' or visit
-  https://chatgpt.com/codex?app-landing-page=true
-
-
-› 帮我看一下这次改动里，有没有形成新的规则、例外规则，或者文档已经偏离实现的地方。
-
-
-• 这次我按“变更发现/文档漂移检查”来处理，先读取相关 skill 和项目记忆规则，再基于当前工作区内容判断有没有新的规则、例外规则
-  或实现与文档偏离。
-
-• Explored
-  └ Read SKILL.md
-
-• Called memory-hub.read_memory({"ref":"system://boot"})
-  └ {"ok": true, "code": "MEMORY_READ", "message": "Memory loaded.", "data": {"ref": "system://boot", "lane": "system", "s
-        ource_kind": "boot", "generated_at": "2026-03-11T09:46:34Z", "projection_path": "/Users/sunpure/Documents/Code/mem
-        ory-hub/.memory/_store/projections/boot.json", "items": [{"uri":
-        "constraint://durable-memory-requires-proposal-and-human-review", "type": "constraint", "storage_lane": "durable",
-        "doc_ref": null, "title": "Durable memory requires proposal and human review", "content": "durable memory 不允许直
-        写，必须经过 `propose -> review -> approve/reject` 工作流。长期记忆的生效必须由人工通过审查...
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 我已经切到 memory-admin 路径，并加载了 durable boot。下一步先读项目 catalog，再看 discover 这条维护链路如何判定“新规则 /
-  例外 / 文档漂移”，避免凭感觉下结论。
-
-• Called memory-hub.read_memory({"ref":"catalog://topics"})
-  └ {"ok": true, "code": "MEMORY_READ", "message": "Memory loaded.", "data": {"ref": "catalog://topics", "lane": "catalog",
-        "source_kind": "catalog", "target": "topics", "name": null, "content": "# Memory Hub — Topics Index\n\n## 代码模块
-        \n- core — 基础设施与仓库级行为接线：CLI 分发、JSON envelope、路径管理、规则入口、MCP/自测启动\n- memory — 知识管
-        理命令：init/read/list/search/index\n- catalog — 索引管理命令：read/update/repair\n- durable-memory — v2 主线 + de
-        cision discovery Phase 1：统一 read/search/capture/update/show review、本地 hybrid recall、boot/search projections
-        、session-extract 与 discover 候选发现\n- tests — 单元测试：核心模块与 durable memory ...
-
-• Called
-  └ ace-tool.codebase-retrieval({"information_request":"请详细定位并总结这个仓库中与“memory-hub discover”相关的实现、命令入
-        口、候选项判定规则、它读取哪些变更来源，以及任何与 docs drift / decision discovery / exception detection 相关的测试
-        和文档。需要包含文件路径、关键符号、调用链、判定条件和已知限制。"})
-    Failed to retrieve codebase information: HTTP error: 401 Unauthorized
-
-• Explored
-  └ Search discover|docs drift|exception|rule|decision in .memory
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 代码检索工具这次不可用，我改用仓库内实现和测试直接核对。先读 discover 的入口、上下文装配和 detector，再实际跑一遍 memory-
-  hub discover 看它对当前改动给出的候选。
-
-• Explored
-  └ Read discovery_cli.py, discovery_signals.py, decision_discovery.py, discovery_context.py
-
-• Ran python3 -m lib.cli discover --project-root /Users/sunpure/Documents/Code/memory-hub
-  └ {
-      "ok": true,
-    … +13 lines
-      "message": "Decision discovery completed."
-    }
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• discover 的机器判定结果是 0 个候选，且当前工作区改动只落在 AGENTS.md、skills/memory-admin/SKILL.md、skills/project-
-  memory/SKILL.md。我接着人工核对这些说明性变更和仓库实现是否一致，重点看有没有新增流程约束或文档已经跑偏。
-
-• Explored
-  └ Read AGENTS.md, SKILL.md, README.md
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 我在对 README、AGENTS 和 skill 文案做交叉验证。现在看下来，大方向一致，但还要再核对两类细节：一是 README 里的流程描述有没
-  有漏掉 discover，二是文档提到的 MCP/CLI 能力面是否和实际导出一致。
-
-• Explored
-  └ Search show_memory_review|capture_memory|update_memory|propose_memory|propose_memory_update|tools =|tool\( in lib
-    Read test_decision_discovery.py, mcp_server.py
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 结论已经比较清楚了：这次变更本身没有引入新的代码级例外实现，主要是在收紧 agent/skill 路由规则。还剩最后一步，我把对应行号
-  补齐，区分“新规则”和“现有文档与实现/skill 的偏差”。
-
-• Explored
-  └ Read AGENTS.md, SKILL.md, discovery_signals.py, README.md, discovery_context.py
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 有，形成了规则收口，但没有看到新的“例外规则”落到实现里；同时有 1 处 README 已经落后于当前 skill/实现。
-
-  发现
-
-  1. 文档漂移：README.md:82 仍把 memory-admin 描述成 repair / diagnose / session-extract，遗漏了 discover。但当前规则已经明
-     确把 discover 归到 memory-admin 维护路径里，AGENTS.md:104 和 skills/memory-admin/SKILL.md:65 都一致要求“检查当前改动里
-     是否有新规则 / 例外规则 / docs drift”时走 memory-hub discover。这属于说明文档偏离当前 workflow。
-  2. 轻微命名漂移：README.md:85 写的是 MCP 提供 show_review，但实际 tool 名是 show_memory_review，实现见 lib/
-     mcp_server.py:128，README 后文自己的工具清单也写成了 show_memory_review，见 README.md:140。这更像文案没同步，不是行为
-     错误。
-
-  这次改动里已经形成/强化的规则
-
-  - project-memory 是主入口，memory-admin 只做维护与诊断，不参与主 workflow，见 AGENTS.md:24 和 skills/project-memory/
-    SKILL.md:24。
-  - session-extract 和 discover 都只能走 memory-admin 维护路径，不能当成通用 MCP 写入口，见 AGENTS.md:104。
-  - durable 分支的硬规则被进一步收紧：先 read_memory(system://boot)，pending review 先 show_memory_review(...)，再进入人工
-    确认分流，见 AGENTS.md:52 和 skills/project-memory/SKILL.md:119。
-
-  没有看到的东西
-
-  - 没看到新的实现级“例外规则”。我实际跑了 python3 -m lib.cli discover --project-root /Users/sunpure/Documents/Code/memory-
-    hub，结果是 candidate_count: 0，当前工作区改动只命中 AGENTS.md、skills/memory-admin/SKILL.md、skills/project-memory/
-    SKILL.md。结合 lib/discovery_context.py:27 和 lib/discovery_signals.py:21，这说明当前没有被探测到的代码实现级新规则/新
-    例外，主要是 workflow 文档和 skill 约束在收口。
-
-
-› 结合这轮改动和我们刚才讨论的内容，帮我判断有没有值得沉淀成项目知识的规则候选，但先不要直接生效。
-
-
-• 我按“候选发现、不生效”处理：先基于这轮改动和刚才确认出的约束，给 discover 补一份摘要输入，再结合现有 docs/skills 判断哪些
-  值得进项目知识候选。
-
-• Ran mktemp /tmp/memory-hub-discover-summary.XXXXXX.txt
-  └ /tmp/memory-hub-discover-summary.XXXXXX.txt
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 我拿到一个临时摘要文件路径，接着把这轮讨论里确认的规则收口写进去，再跑一次只读发现，最后人工筛掉噪音候选。
-
-• Ran printf '%s
-  │ ' '统一项目记忆必须从 project-memory 进入。memory-admin 只用于维护动作，例如 discover、session-extract、
-  │ catalog-repair。判断当前代码改动里是否有新规则、例外规则或 docs drift 候选时，必须通过 memory-admin 运行 memory-hub
-  │ … +2 lines
-  └ (no output)
-
-• Explored
-  └ Read decisions.md, 记忆相关写入必须经过统一写入口.md
-
-• Ran python3 -m lib.cli discover --project-root /Users/sunpure/Documents/Code/memory-hub --summary-file /tmp/
-  │ memory-hub-discover-summary.XXXXXX.txt
-  └ {
-      "ok": true,
-    … +41 lines
-      "message": "Decision discovery completed."
-    }
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 有，值得沉淀的候选主要是 1 条主规则，外加 1 条文档同步候选。
-
-  discover 在结合这轮改动和我们刚才讨论的摘要后，返回了 1 个高置信候选：docs-drift -> doc://pm/decisions。它指向的是 pm/de
-  cisions.md，因为现有产品决策里已经记录了 “discovery lane 不直接写 active state” 这层方向，但还没有把这轮新收紧的入口规则
-  写进去：统一项目记忆必须从 project-memory 进入，memory-admin 只负责维护动作；当用户要判断“当前改动里有没有新规则、例外规
-  则或 docs drift 候选”时，应通过 memory-admin 运行 memory-hub discover。这条我认为值得作为项目知识候选保留，而且更像 docs-
-  only 候选，不需要进入 durable memory。
-
-  另外还有 1 条我认为值得一起作为候选看待，但它更偏“实现文档修正”而不是新知识：README 对 memory-admin 的职责描述漏了
-  discover，并且行为层那一段把 MCP 能力写成了 show_review，而实现实际是 show_memory_review，见 README.md:82 和 lib/
-  mcp_server.py:128。这条不一定要进项目决策文档，但至少是明确的 docs drift 候选。
-
-  没有看到值得单独沉淀的“新例外规则”。这轮改动是在收紧入口和审查分流，没有引入某个受限场景下的特殊处理分支；discover 也没有
-  报出 exception-rule 候选。
-
-  如果按候选清单表达，我会这样归纳，先不生效：
-
-  - 候选 1：project-memory 是统一项目记忆主入口，memory-admin 仅负责维护/诊断动作，discover 与 session-extract 均属维护路
-    径。
-  - 候选 2：判断“当前改动是否产生新规则、例外规则或 docs drift”时，标准入口是 memory-admin -> memory-hub discover，且该命令
-    只返回候选，不直接写 active docs 或 approved durable state。
-  - 候选 3：README 需要同步 memory-admin 包含 discover，以及 MCP review tool 的正式名称是 show_memory_review。
-
-
-› 帮我看一下这几个新增文件在当前架构里分别负责什么。
-
-
-• 我先按当前工作区的新增文件来核对，确认具体是哪些文件，再结合现有分层说明它们在架构里的职责。
-
-• Ran git status --short
-  └  M .memory/_store/projections/boot.json
-     M .memory/_store/projections/search.json
-     M AGENTS.md
-     M skills/memory-admin/SKILL.md
-     M skills/project-memory/SKILL.md
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 如果你指的是这轮里新增职责说明的这 3 个文件，它们在当前架构里的分工是这样的：
-
-  AGENTS.md 是最外层的仓库级治理规则。它不承载具体实现逻辑，负责定义硬边界和总路由，比如什么时候进入 project-memory、什么
-  时候只能走 memory-admin、durable memory 何时必须先读 system://boot、什么时候必须停在人工 review 分流。可以把它看成“全局
-  宪法层”。
-
-  skills/project-memory/SKILL.md 是主工作流编排层。它定义正常项目记忆场景该怎么读 docs/catalog/durable、什么时候切入
-  durable branch、统一写入口怎么走、pending review 怎么 handoff。也就是说，面向日常使用时，它是“主入口 orchestrator”。
-
-  skills/memory-admin/SKILL.md 是维护与诊断层。它不参与主 workflow，只负责 catalog-repair、session-extract、discover、索引/
-  投影诊断这类运维动作。你这次问“有没有新的规则、例外规则或 docs drift”就是它负责的范围。
-
-  放到 README 里那套五层架构中，就是：
-
-  - AGENTS.md：规则识别与硬边界层
-  - skills/project-memory/SKILL.md：统一项目记忆主入口层
-  - skills/memory-admin/SKILL.md：维护/诊断入口层
-
-  如果你说的“几个新增文件”不是这 3 个，把文件名发我，我按当前架构逐个拆。
-
-
-› 把这轮已经确认的规则整理成正式项目记忆，但先按正确流程处理，不要绕过审查。
-
-
-• 我按正式项目记忆流程来做：先从 project-memory 读现有项目知识，确认落点文档，然后通过统一写入口生成待审查的 docs change
-  review，只展示 review，不直接生效。
-
-• Called memory-hub.read_memory({"ref":"catalog://topics"})
-  └ {"ok": true, "code": "MEMORY_READ", "message": "Memory loaded.", "data": {"ref": "catalog://topics", "lane": "catalog",
-        "source_kind": "catalog", "target": "topics", "name": null, "content": "# Memory Hub — Topics Index\n\n## 代码模块
-        \n- core — 基础设施与仓库级行为接线：CLI 分发、JSON envelope、路径管理、规则入口、MCP/自测启动\n- memory — 知识管
-        理命令：init/read/list/search/index\n- catalog — 索引管理命令：read/update/repair\n- durable-memory — v2 主线 + de
-        cision discovery Phase 1：统一 read/search/capture/update/show review、本地 hybrid recall、boot/search projections
-        、session-extract 与 discover 候选发现\n- tests — 单元测试：核心模块与 durable memory ...
-
-• Called memory-hub.read_memory({"ref":"doc://pm/decisions"})
-  └ {"ok": true, "code": "MEMORY_READ", "message": "Memory loaded.", "data": {"ref": "doc://pm/decisions", "lane": "docs",
-        "source_kind": "doc", "bucket": "pm", "name": "decisions", "content": "# 需求结论与产品决策\n\n### 结论 1 — 2026-0
-        3-11\n背景：Phase 1F 完成后，Codex 路径的真实会话验收已基本符合预期；Claude 路径暂时搁置，不再阻塞当前版本收口。\n
-        结论：\n- 若暂不要求 Claude 的增强交互一并完成，则 durable-memory v1 MVP 可视为完成。\n- Codex 路径作为当前默认使
-        用路径。\n- 后续工作从“继续重构”切换为“真实使用 + 体验优化 + Claude 补验”。\n\n### 结论 2 — 2026-03-11\n背景：近期
-        收尾事项中的 review 队列清理、真实任务观察和 backlog 归类已完成，剩余问题已不再属于 MVP 阻塞项。\n结论：\n- review
-        队列清理完成后，当前 durable memory 状态可进入真实使用。\n- 真实任务观察通过后，boot-firs...
-
-• Called memory-hub.read_memory({"ref":"doc://dev/记忆相关写入必须经过统一写入口"})
-  └ {"ok": true, "code": "MEMORY_READ", "message": "Memory loaded.", "data": {"ref":
-        "doc://dev/记忆相关写入必须经过统一写入口", "lane": "docs", "source_kind": "doc", "bucket": "dev", "name": "记忆相
-        关写入必须经过统一写入口", "content": "# 记忆相关写入必须经过统一写入口\n\n所有记忆相关写入都必须经过统一写入口处
-        理，不能直接修改 docs lane 或 durable store。", "title": "记忆相关写入必须经过统一写入口"}, "degraded": false, "de
-        grade_reasons": []}
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 我已经确认落点放在 doc://pm/decisions 最合适：这是新的产品/工作流结论，不是单纯实现细节。现在通过统一写入口生成 docs cha
-  nge review，然后把 review 内容展示给你，不执行批准。
-
-• Called
-  └ memory-hub.update_memory({"ref":"doc://pm/decisions","mode":"append","append":"\n\n### 结论 16 — 2026-03-12\n背景：
-        Phase 2F 引入 discovery lane 后，仓库已经具备从代码变更中发现规则候选的能力，但如果不把入口职责和适用边界继续收紧，
-        agent 仍可能把主工作流、维护动作和候选发现混在一起使用，导致用户心智和项目知识再次漂移。\n结论：\n- `project-
-        memory` 固定为统一项目记忆主入口，负责普通仓库知识读取、统一写入口路由，以及进入 durable branch 时的内部编排。\n-
-        `memory-admin` 固定为维护入口，只用于 `discover`、`session-extract`、`catalog-repair` 与诊断类动作，不参与普通项目
-        记忆主 workflow。\n- 当用户要判断“当前代码改动里是否出现新的规则、例外规则或 docs drift 候选”时，标准入口固定为
-        `memory-admin -> memory-hub discover`。\n- `discover` 只负责返回候选与证据，不直接写 active docs，也不直接写
-        approved durable state；后续沉淀仍必须回到既有 unified write lane 与 review surface。\n","reason":"将本轮确认的项目
-        记忆入口职责与 discovery 维护路径沉淀为正式项目知识，但先通过 docs review 审查，不直接生效。"})
-    {"ok": true, "code": "UPDATE_OK", "message": "Update completed.", "data": {"route": "docs-only", "docs_result": {"revi
-        ew_id": 8, "doc_ref": "doc://pm/decisions", "title": "decisions", "computed_diff": "--- before\n+++ after\n@@ -134
-        ,3 +134,12 @@\n 更后续版本：\n - 图结构、alias、多跳关系\n - 多租户、远程部署\n+\n+\n+### 结论 16 — 2026-03-12\n+
-        背景：Phase 2F 引入 discovery lane 后，仓库已经具备从代码变更中发现规则候选的能力，但如果不把入口职责和适用边界继
-        续收紧，agent 仍可能把主工作流、维护动作和候选发现混在一起使用，导致用户心智和项目知识再次漂移。\n+结论：\n+- `pro
-        ject-memory` 固定为统一项目记忆主入口，负责普通仓库知识读取、统一写入口路由，以及进入 durable branch 时的内部编排
-        。\n+- `memory-admin` 固定为维护入口，只用于 `discover`、`session-extract`...
-
-• Called memory-hub.show_memory_review({"ref":"doc://pm/decisions"})
-  └ {"ok": true, "code": "REVIEW_DETAIL_OK", "message": "Review detail loaded.", "data": {"review_id": 8, "ref":
-        "doc://pm/decisions", "lane": "docs", "review_kind": "docs_change_review", "doc_review": {"review_id": 8, "status":
-        "pending", "doc_ref": "doc://pm/decisions", "title": "decisions", "before_content": "# 需求结论与产品决策\n\n###
-        结论 1 — 2026-03-11\n背景：Phase 1F 完成后，Codex 路径的真实会话验收已基本符合预期；Claude 路径暂时搁置，不再阻塞
-        当前版本收口。\n结论：\n- 若暂不要求 Claude 的增强交互一并完成，则 durable-memory v1 MVP 可视为完成。\n- Codex 路
-        径作为当前默认使用路径。\n- 后续工作从“继续重构”切换为“真实使用 + 体验优化 + Claude 补验”。\n\n### 结论 2 — 2026-0
-        3-11\n背景：近期收尾事项中的 review ...
-
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-• 已按正式流程处理，没有绕过审查。
-
-  我通过统一写入口为 doc://pm/decisions 创建了一个待审查的 docs change review，当前是 review_id: 8，状态 pending。这次没有
-  直接生效，只是进入 review 队列。
-
-  提议内容是新增“结论 16”，核心规则有 4 条：
-
-  - project-memory 固定为统一项目记忆主入口。
-  - memory-admin 固定为维护入口，只负责 discover、session-extract、catalog-repair 和诊断动作。
-  - 判断当前代码改动里是否有新规则、例外规则或 docs drift 候选时，标准入口固定为 memory-admin -> memory-hub discover。
-  - discover 只返回候选和证据，不直接写 active docs，也不直接写 approved durable state。
-
-  本次 review 的 diff 摘要是：
-
-  @@ -134,3 +134,12 @@
-   更后续版本：
-   - 图结构、alias、多跳关系
-   - 多租户、远程部署
-  +
-  +
-  +### 结论 16 — 2026-03-12
-  +背景：Phase 2F 引入 discovery lane 后，仓库已经具备从代码变更中发现规则候选的能力，但如果不把入口职责和适用边界继续收
-  紧，agent 仍可能把主工作流、维护动作和候选发现混在一起使用，导致用户心智和项目知识再次漂移。
-  +结论：
-  +- `project-memory` 固定为统一项目记忆主入口，负责普通仓库知识读取、统一写入口路由，以及进入 durable branch 时的内部编
-  排。
-  +- `memory-admin` 固定为维护入口，只用于 `discover`、`session-extract`、`catalog-repair` 与诊断类动作，不参与普通项目记忆
-  主 workflow。
-  +- 当用户要判断“当前代码改动里是否出现新的规则、例外规则或 docs drift 候选”时，标准入口固定为 `memory-admin -> memory-hub
-  discover`。
-  +- `discover` 只负责返回候选与证据，不直接写 active docs，也不直接写 approved durable state；后续沉淀仍必须回到既有
-  unified write lane 与 review surface。
-
-  如果你要继续下一步，现在可以基于这个 pending review 决定是否批准。
+  这样理解对吗？

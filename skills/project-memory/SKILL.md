@@ -207,15 +207,11 @@ If proposal returns `PROPOSAL_CREATED`:
    ```text
    show_memory_review(proposal_id|ref)
    ```
-2. if MCP review display is unavailable, run the CLI fallback:
-   ```bash
-   python3 -m lib.cli review show <proposal_id|ref>
-   ```
-3. if both review paths fail, report the exact failure and give the precise
-   retry command; do not invent proposal details
-4. show the proposal summary and diff
-5. enter review handoff
-6. do not claim it is already approved
+2. if MCP review display is unavailable, stop and report the exact failure as a
+   host or `memory-hub` MCP configuration issue
+3. show the proposal summary and diff
+4. enter review handoff
+5. do not claim it is already approved
 
 ### Step 6: Pending proposal branch
 
@@ -233,14 +229,10 @@ Instead:
    ```text
    show_memory_review(proposal_id|ref)
    ```
-4. if MCP review display is unavailable, run the CLI fallback:
-   ```bash
-   python3 -m lib.cli review show <proposal_id|ref>
-   ```
-5. if both review paths fail, report the exact failure and give the precise
-   retry command; do not invent proposal details
-6. show the current pending proposal summary and diff
-7. enter review handoff
+4. if MCP review display is unavailable, stop and report the exact failure as a
+   host or `memory-hub` MCP configuration issue
+5. show the current pending proposal summary and diff
+6. enter review handoff
 
 ### Step 7: Review handoff
 

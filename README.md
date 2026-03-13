@@ -92,7 +92,7 @@ Phase 2F 起，项目记忆的行为层分为五层：
 - 跨会话、高价值、非代码信息才应进入 durable memory
 - 如果最相关目标是 pending proposal，只能进入人工审查分流，不能继续 update
 - 一旦进入 durable-memory workflow，本会话第一条 durable-memory 工具调用必须是 `memory-hub.read_memory(ref="system://boot")`
-- review 目标进入 pending 状态后，必须先 `memory-hub.show_memory_review(...)`；只有 MCP review 展示不可用时才退回 `review show <proposal_id|ref>`
+- review 目标进入 pending 状态后，必须先 `memory-hub.show_memory_review(...)`；若该 MCP 展示不可用，应视为宿主或 MCP 配置问题并停止
 
 ## 文件型知识命令
 
@@ -192,7 +192,7 @@ Phase 2F 后当前 MCP 仍暴露 7 个 tools：
 6. 若路由结果是 `docs-only`，系统创建持久 docs change review；批准后再应用 docs 与 catalog 变更
 7. 若路由结果是 `durable-only`，系统继续走 durable proposal / review
 8. 若路由结果是 `dual-write`，系统创建 docs change review，并关联 durable summary proposal；批准 docs review 时同步批准关联 durable proposal
-9. review 目标一旦产生或命中 pending 状态，先用 `memory-hub.show_memory_review(...)` 展示摘要和 diff；只有该 MCP 展示不可用时才退回 CLI `review show <proposal_id|ref>`
+9. review 目标一旦产生或命中 pending 状态，先用 `memory-hub.show_memory_review(...)` 展示摘要和 diff；若该 MCP 展示不可用，应视为宿主或 MCP 配置问题并停止，不再设计 fallback
 10. 若宿主支持结构化确认工具，则用三分叉确认；否则退化为文本分叉：`批准此提案` / `拒绝此提案` / `暂不处理`
 11. 只有在展示 proposal 详情后且用户明确确认时，agent 才可代理执行 CLI `review approve/reject`
 12. 必要时用 CLI `rollback`

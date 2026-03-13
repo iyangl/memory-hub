@@ -7,7 +7,10 @@
       "Bash(python -m lib.cli review:*)",
       "Bash(python -m lib.cli rollback:*)",
       "Bash(bin/selftest-phase1c:*)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "mcp__memory-hub__search_memory",
+      "Bash(ln -sf /Users/sunpure/Documents/Code/memory-hub/skills/memory-admin ~/.claude/skills/memory-admin)",
+      "mcp__memory-hub__read_memory"
     ]
   },
   "enableAllProjectMcpServers": true,
