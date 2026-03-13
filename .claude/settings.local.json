@@ -10,7 +10,9 @@
       "Bash(pip install:*)",
       "mcp__memory-hub__search_memory",
       "Bash(ln -sf /Users/sunpure/Documents/Code/memory-hub/skills/memory-admin ~/.claude/skills/memory-admin)",
-      "mcp__memory-hub__read_memory"
+      "mcp__memory-hub__read_memory",
+      "mcp__memory-hub__capture_memory",
+      "mcp__memory-hub__show_memory_review"
     ]
   },
   "enableAllProjectMcpServers": true,

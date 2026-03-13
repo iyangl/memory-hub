@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-03-13T03:34:24Z",
+  "generated_at": "2026-03-13T08:44:38Z",
   "projection_path": "/Users/sunpure/Documents/Code/memory-hub/.memory/_store/projections/search.json",
   "entries": [
     {
@@ -2086,6 +2086,72 @@
         "plan",
         "md",
         "用于端到端手动验收"
+      ]
+    },
+    {
+      "ref": "preference://chinese-replies-2",
+      "lane": "durable",
+      "source_kind": "durable",
+      "type": "preference",
+      "storage_lane": "durable",
+      "doc_ref": null,
+      "title": "Chinese Replies",
+      "content": "用户偏好中文回复，除非明确要求其他语言。",
+      "tokens": [
+        "chinese",
+        "replies",
+        "用户偏好中文回复",
+        "除非明确要求其他语言",
+        "when",
+        "tailoring",
+        "responses"
+      ]
+    },
+    {
+      "ref": "constraint://item-2",
+      "lane": "durable",
+      "source_kind": "durable",
+      "type": "constraint",
+      "storage_lane": "durable",
+      "doc_ref": null,
+      "title": "每次交互必须首先声明操作类型",
+      "content": "在任何回答用户问题之前，必须首先输出一行声明：\n\n「我判断此次操作类型为：[规则发现 / 代码理解 / 功能开发 / 维护诊断]」\n\n然后按对应入口执行：\n- 规则发现 → memory-admin，执行 discover\n- 代码理解 / 功能开发 → project-memory，先读 catalog + docs\n- 维护诊断 → memory-admin，直接执行维护工具\n\n这条规则的目的是：skill 被调用一次后，后续对话不需要用户重复显式调用，LLM 通过每次强制声明重新激活工作流上下文，从而在整个会话中持续按正确流程执行。",
+      "tokens": [
+        "每次交互必须首先声明操作类型",
+        "在任何回答用户问题之前",
+        "必须首先输出一行声明",
+        "我判断此次操作类型为",
+        "规则发现",
+        "代码理解",
+        "功能开发",
+        "维护诊断",
+        "然后按对应入口执行",
+        "规则发现",
+        "memory",
+        "admin",
+        "执行",
+        "discover",
+        "代码理解",
+        "功能开发",
+        "project",
+        "memory",
+        "先读",
+        "catalog",
+        "docs",
+        "维护诊断",
+        "memory",
+        "admin",
+        "直接执行维护工具",
+        "这条规则的目的是",
+        "skill",
+        "被调用一次后",
+        "后续对话不需要用户重复显式调用",
+        "llm",
+        "通过每次强制声明重新激活工作流上下文",
+        "从而在整个会话中持续按正确流程执行",
+        "每次收到用户问题时",
+        "在做任何分析或执行前",
+        "必须先触发此规则完成声明"
       ]
     },
     {
