@@ -1,7 +1,7 @@
 # Memory Hub v3 Skill-Driven Redesign
 
 日期：2026-03-16
-状态：已确认方向，待详细设计
+状态：已确认方向，含参考项目借鉴与 BRIEF.md 设计
 
 ## 1. 重构动机
 
@@ -76,22 +76,43 @@ v2 的大量复杂度花在了"控制 LLM 怎么用记忆系统"上：
 
 ## 3. 存储设计
 
-### 3.1 保留
-
-- `.memory/docs/` — 纯 markdown，按领域分目录，是 /recall 的数据源
-- `.memory/catalog/` — 索引文件，/recall 用它决定加载什么
-
-### 3.2 简化
-
-目录结构保持现有：
+### 3.1 单一正本 + 两个派生视图
 
 ```
-.memory/docs/
-  architect/   ← 架构决策、技术选型
-  dev/         ← 开发约定、编码规范
-  pm/          ← 产品决策、需求结论
-  qa/          ← 测试策略、质量约定
+.memory/
+  BRIEF.md      ← 派生摘要（/recall 的主要数据源）
+  docs/         ← 唯一正本（所有知识在这里）
+    architect/  ← 架构决策、技术选型
+    dev/        ← 开发约定、编码规范
+    pm/         ← 产品决策、需求结论
+    qa/         ← 测试策略、质量约定
+  catalog/      ← 派生索引（定位用）
+    topics.md
+    modules/
 ```
+
+核心约束：**docs/ 是唯一正本，BRIEF.md 和 catalog/ 都是派生产物。**
+
+- BRIEF.md 可以从 docs 重建（brief-repair）
+- catalog 可以从 docs 重建（catalog-repair）
+- 不存在"两个正本冲突"的可能
+
+### 3.2 BRIEF.md 设计
+
+BRIEF.md 是 `/recall` 的主要数据源，是 docs 的精简派生摘要。
+
+设计约束：
+- 所有信息必须也存在于 docs/ 中，BRIEF.md 不包含独有数据
+- `/save` 先写 docs，再从 docs 重新生成 BRIEF.md
+- BRIEF.md 丢失时 `/recall` 退化为直接读 docs，下次 `/save` 再生成
+- 建议控制在 ~200 行以内
+
+为什么需要 BRIEF.md 而不是每次直接读 docs：
+
+1. **筛选质量更高** — 摘要在 `/save` 时生成（LLM 有完整任务上下文），比 `/recall` 时猜测哪些 docs 相关更准
+2. **确定性** — 每次 `/recall` 读到一样的内容，不会因为 LLM 的选择差异产生不同结果
+3. **Token 效率** — 500-1000 tokens vs 完整 docs 5000-10000 tokens
+4. **优雅降级** — BRIEF.md 不存在时系统仍工作，只是 `/recall` 变慢
 
 ### 3.3 移除
 
@@ -152,9 +173,11 @@ MCP server 整个移除。原因：
 
 ## 6. 知识判断框架
 
-### 6.1 什么值得保存（正面清单）
+### 6.1 什么值得保存 — 后悔测试（借鉴 Nocturne）
 
-核心判断：**新会话没有这条信息，会走弯路吗？**
+核心判断：**这次会话结束后，如果没记下来会后悔吗？**
+
+等价表述：**新会话没有这条信息，会走弯路吗？**
 
 具体包括：
 - 决策结论（选了什么、为什么选）
@@ -172,8 +195,25 @@ MCP server 整个移除。原因：
 ### 6.3 分类简化
 
 LLM 在 /save 时只需判断两件事：
-1. 值不值得存 — 用正面/反面清单
+1. 值不值得存 — 用后悔测试
 2. 放哪个目录 — architect / dev / pm / qa 四选一
+
+### 6.4 写入前去重（借鉴 Memory Palace）
+
+`/save` 写入前搜索已有 docs，判断是新增还是更新已有文档：
+- 搜索命中近似内容 → 更新已有文档（合并/追加）
+- 未命中 → 新增文档
+- 完全重复 → 跳过
+
+替代 v2 的 proposal 状态机，只是一个搜索+判断步骤。
+
+### 6.5 Disclosure 标签（借鉴 Nocturne）
+
+每条知识附"何时需要这条信息"的场景描述：
+- 好例子："当修改 MCP 相关代码时"、"当讨论部署策略时"
+- 坏例子："重要的"、"记住"
+
+`/recall` 可据此按当前任务上下文选择性加载。
 
 ## 7. 与 v2 的关系
 
@@ -190,3 +230,49 @@ LLM 在 /save 时只需判断两件事：
 | Codex | slash command | slash command | slash command | 直接 Edit 文件 |
 
 不依赖 hooks、不依赖 MCP、不依赖规则遵从。两个平台完全一致。
+
+## 9. 参考项目借鉴
+
+### 9.1 CCG-Workflow — 架构模式
+
+| 借鉴点 | 应用 |
+|--------|------|
+| 固定 workflow 模板替代规则 | 三个 command 都是确定性脚本 |
+| 用户显式调用控制流程 | 不依赖 LLM 自觉 |
+| 状态通过文件传递 | `.memory/` 就是状态文件 |
+| 模板详尽、规则极少 | CLAUDE.md 大幅精简 |
+
+### 9.2 OpenClaw Memory Fusion — 存储与分层
+
+| 借鉴点 | 应用 |
+|--------|------|
+| MEMORY.md 热缓存（~200 行） | BRIEF.md 派生摘要 |
+| 三层记忆分级（hot/warm/deep） | BRIEF(hot) → docs(warm) → catalog(deep) |
+| 滚动"近期更新"区 | `/save` 可维护 BRIEF.md 中的近期变更区 |
+| 写入时提炼结论，不存原文 | `/save` 的核心动作 |
+
+### 9.3 Nocturne Memory — 判断与标注
+
+| 借鉴点 | 应用 |
+|--------|------|
+| 后悔测试 | `/save` 核心判断标准 |
+| Disclosure 字段（何时回忆） | 每条知识附适用场景标签 |
+| 优先级分层 (P0/P1/P2) | `/recall` 按优先级渐进加载 |
+| 必须先读再写 | `/save` 写入前搜索已有内容 |
+
+### 9.4 Memory Palace — 写入防护
+
+| 借鉴点 | 应用 |
+|--------|------|
+| Write Guard 去重 | `/save` 写入前搜索，判断新增 vs 更新 |
+| Compact 紧凑化 | `/save` 提炼结论，BRIEF.md 是 docs 的紧凑视图 |
+| 优雅降级 | BRIEF.md 丢失时退化到直接读 docs |
+
+### 9.5 明确不借鉴的部分
+
+| 来源 | 不借鉴 | 原因 |
+|------|--------|------|
+| Memory Palace | 9 个 MCP tool、vitality 衰减、FastAPI server | 过重，v3 去 MCP |
+| OpenClaw | 三层 cron 调度、Telegram 通知、QMD 索引 | 运行时模型不同，v3 无 cron |
+| Nocturne | 图数据库、UUID node 体系、changeset 快照 | 过重，v3 用纯文件 |
+| CCG | 多模型协作编排 | 不相关，v3 只做记忆 |

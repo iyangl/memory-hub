@@ -13,7 +13,9 @@
       "mcp__memory-hub__read_memory",
       "mcp__memory-hub__capture_memory",
       "mcp__memory-hub__show_memory_review",
-      "mcp__sequential-thinking__sequentialthinking"
+      "mcp__sequential-thinking__sequentialthinking",
+      "Bash(find:*)",
+      "Bash(cd:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

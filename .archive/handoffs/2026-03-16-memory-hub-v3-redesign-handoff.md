@@ -37,8 +37,8 @@
 
 | 组件 | 说明 |
 |------|------|
-| `.memory/docs/` | 项目知识主文档，原样保留 |
-| `.memory/catalog/` | 索引文件，原样保留 |
+| `.memory/docs/` | 项目知识主文档（唯一正本），原样保留 |
+| `.memory/catalog/` | 派生索引文件，原样保留 |
 | docs 内容 | architect/, dev/, pm/, qa/ 下的已有知识全部保留 |
 | ~10 个基础 Python 模块 | paths, envelope, catalog_read/repair, memory_read/search/init, cli, utils |
 
@@ -46,31 +46,50 @@
 
 | 组件 | 说明 |
 |------|------|
-| `/init` command | 固定 workflow：扫描项目 → 生成初始 docs → 构建 catalog |
-| `/recall` command | 固定 workflow：读 catalog → 加载相关 docs → 注入上下文 |
-| `/save` command | 固定 workflow：提炼知识 → 判断价值 → 写入 docs → 修 catalog |
+| `.memory/BRIEF.md` | docs 的派生摘要，/recall 的主数据源，可从 docs 重建 |
+| `/init` command | 固定 workflow：扫描项目 → 生成初始 docs → 构建 catalog → 生成 BRIEF.md |
+| `/recall` command | 固定 workflow：读 BRIEF.md → 注入上下文（BRIEF 缺失时退化为读 docs） |
+| `/save` command | 固定 workflow：提炼知识 → 去重检查 → 写入 docs → 重建 BRIEF.md → 修 catalog |
 
 ## 3. 已冻结的新设计前提
 
 1. 这仍然是项目级系统
-2. 存储统一为 `.memory/docs/` 下的 markdown 文件，不再有独立的 durable store
+2. docs/ 是唯一正本；BRIEF.md 和 catalog/ 都是派生产物，可从 docs 重建
 3. 用户通过显式 slash command 控制记忆的加载和保存
 4. 工作过程中信任 LLM 的上下文能力，不干预
 5. LLM 可以在工作中自主保存知识（Layer 2），但不强依赖
 6. 不使用 MCP，所有操作通过 skill workflow 模板 + 原生工具完成
 7. 跨平台一致：Claude Code 和 Codex 使用相同的 skill 模板
 
-## 4. 知识判断框架
+## 4. 存储一致性模型
+
+v2 的核心复杂度来自 docs 和 durable store 的双正本一致性问题。
+
+v3 通过"单一正本 + 派生视图"彻底消除这个问题：
+
+```
+docs/      = 唯一正本（所有知识在这里）
+BRIEF.md   = 派生摘要（从 docs 生成，brief-repair 可重建）
+catalog/   = 派生索引（从 docs 生成，catalog-repair 可重建）
+```
+
+BRIEF.md 不包含 docs 中没有的信息。如果 BRIEF.md 与 docs 不一致，以 docs 为准，重建 BRIEF.md 即可。
+
+## 5. 知识判断框架
 
 v3 把"什么值得保存"简化为：
 
-正面判断：新会话没有这条信息，会走弯路吗？
+**后悔测试**（借鉴 Nocturne）：这次会话结束后，如果没记下来会后悔吗？
 - 决策结论、项目约束、架构选型理由、踩过的坑
 
-反面排除：
+**反面排除**：
 - 代码本身能表达的、临时调试过程、未形成结论的讨论、通用知识
 
-分类：只需判断放 architect / dev / pm / qa 哪个目录。
+**分类**：只需判断放 architect / dev / pm / qa 哪个目录
+
+**去重**（借鉴 Memory Palace）：写入前搜索已有 docs，判断新增 vs 更新
+
+**Disclosure 标签**（借鉴 Nocturne）：每条知识附"何时需要"的场景描述
 
 ## 5. 当前仓库基线
 
@@ -79,10 +98,24 @@ v3 把"什么值得保存"简化为：
 - 重构方案：`.archive/plans/2026-03-16-memory-hub-v3-skill-driven-redesign.md`
 - v2 完成态：`.archive/handoffs/2026-03-11-memory-hub-v2-completion-handoff.md`
 - v2 roadmap：`.archive/plans/2026-03-11-memory-hub-v2-roadmap.md`
-- ccg-workflow 参考：`.refrence/ccg-workflow/`（特别是 `templates/commands/` 下的 workflow 模板）
+- 参考项目：`.refrence/`（ccg-workflow, openclaw-memory-fusion, Memory-Palace, nocturne_memory）
 - 已有项目知识：`.memory/docs/` 全部内容
 
-### 5.2 测试基线
+### 5.2 参考项目借鉴清单
+
+| 来源 | 借鉴 | 应用 |
+|------|------|------|
+| CCG-Workflow | 固定 workflow 模板 | 三个 command 都是确定性脚本 |
+| CCG-Workflow | 用户显式调用 | 不依赖 LLM 自觉 |
+| OpenClaw | MEMORY.md 热缓存 | BRIEF.md 派生摘要 |
+| OpenClaw | 写入时提炼结论 | /save 的核心动作 |
+| Nocturne | 后悔测试 | /save 核心判断标准 |
+| Nocturne | Disclosure 字段 | 每条知识附适用场景标签 |
+| Nocturne | 优先级分层 | /recall 按优先级渐进加载 |
+| Memory Palace | Write Guard 去重 | /save 写入前搜索，判断新增 vs 更新 |
+| Memory Palace | Compact 紧凑化 | BRIEF.md 是 docs 的紧凑视图 |
+
+### 5.3 测试基线
 
 当前 95 个测试中，与 durable/review/MCP 相关的测试在 v3 中将被移除或归档。
 保留的基础模块测试（catalog, memory read/search/init）应继续通过。
@@ -93,9 +126,9 @@ v3 把"什么值得保存"简化为：
 
 ### P0：设计三个 workflow 模板
 
-1. `/recall` — 固定步骤、输出格式、加载策略
-2. `/save` — 判断框架、写入格式、catalog 更新
-3. `/init` — 扫描范围、初始 doc 结构、catalog 初始化
+1. `/recall` — 读 BRIEF.md 注入上下文（BRIEF 缺失时退化读 docs）
+2. `/save` — 后悔测试 → 去重检查 → 写 docs → 重建 BRIEF.md → 修 catalog
+3. `/init` — 扫描项目 → 生成初始 docs → 构建 catalog → 生成 BRIEF.md
 
 ### P1：实施精简
 
