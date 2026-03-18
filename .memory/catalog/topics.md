@@ -17,8 +17,5 @@
 - docs/architect/decisions.md — 设计决策日志（write→index 重构）
 ### qa-strategy
 - docs/qa/strategy.md — 测试策略与质量约束
-- docs/qa/qa-strategy.md — session extract: manual-session
 ### memory-相关逻辑变更必须补自动化测试和自测记录
 - docs/qa/memory-相关逻辑变更必须补自动化测试和自测记录.md — 补充项目开发约束，确保后续所有 memory 相关改动都有自动化验证与人工自测痕迹。
-### 记忆相关写入必须经过统一写入口
-- docs/dev/记忆相关写入必须经过统一写入口.md — 补充项目关键约束，确保后续记忆相关写入都遵循统一路由和审查流程。

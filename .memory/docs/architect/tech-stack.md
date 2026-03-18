@@ -15,7 +15,13 @@
 ## 关键设计约束
 
 - 无服务进程、无外部数据库服务、无远程协议层
-- 项目级本地存储：`.memory/docs/` + `.memory/_store/memory.db`
-- 所有命令返回统一 JSON envelope（ok/fail），退出码 0/1/2
-- 内容通过 stdin 传入（避免命令行转义和长度限制）
+- 项目级本地存储：纯文件（`.memory/docs/` + `.memory/catalog/` + `.memory/BRIEF.md`）
+- 所有 CLI 命令返回统一 JSON envelope（ok/fail），退出码 0/1/2
 - 单用户场景，不引入并发控制
+
+## 存储架构（v3）
+
+- `docs/` 是唯一正本，所有项目知识在这里
+- `BRIEF.md` 是 docs 的派生摘要，由 `memory-hub brief` 机械拼接生成
+- `catalog/` 是派生索引，由 CLI 命令维护
+- `inbox/` 是 Layer 2 临时写入区，不跟踪 git
