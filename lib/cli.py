@@ -12,13 +12,10 @@ COMMANDS = {
     "list": "lib.memory_list",
     "search": "lib.memory_search",
     "index": "lib.memory_index",
-    "discover": "lib.discovery_cli",
     "catalog-read": "lib.catalog_read",
     "catalog-update": "lib.catalog_update",
     "catalog-repair": "lib.catalog_repair",
-    "review": "lib.review_cli",
-    "rollback": "lib.rollback_cli",
-    "session-extract": "lib.session_extract_cli",
+    "brief": "lib.brief",
 }
 
 

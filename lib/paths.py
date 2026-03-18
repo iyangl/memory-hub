@@ -20,12 +20,9 @@ CATALOG_DIR = "catalog"
 TOPICS_FILE = "topics.md"
 MODULES_DIR = "modules"
 DOCS_DIR = "docs"
-STORE_DIR = "_store"
-PROJECTIONS_DIR = "projections"
 MANIFEST_FILE = "manifest.json"
-MEMORY_DB_FILE = "memory.db"
-BOOT_PROJECTION_FILE = "boot.json"
-SEARCH_PROJECTION_FILE = "search.json"
+INBOX_DIR = "inbox"
+BRIEF_FILE = "BRIEF.md"
 
 
 def memory_root(project_root: Path | None = None) -> Path:
@@ -74,29 +71,14 @@ def manifest_path(project_root: Path | None = None) -> Path:
     return memory_root(project_root) / MANIFEST_FILE
 
 
-def store_root(project_root: Path | None = None) -> Path:
-    """Return the .memory/_store/ directory path."""
-    return memory_root(project_root) / STORE_DIR
+def inbox_root(project_root: Path | None = None) -> Path:
+    """Return the .memory/inbox/ directory path."""
+    return memory_root(project_root) / INBOX_DIR
 
 
-def store_db_path(project_root: Path | None = None) -> Path:
-    """Return path to .memory/_store/memory.db."""
-    return store_root(project_root) / MEMORY_DB_FILE
-
-
-def projections_root(project_root: Path | None = None) -> Path:
-    """Return path to .memory/_store/projections/."""
-    return store_root(project_root) / PROJECTIONS_DIR
-
-
-def boot_projection_path(project_root: Path | None = None) -> Path:
-    """Return path to the boot projection JSON file."""
-    return projections_root(project_root) / BOOT_PROJECTION_FILE
-
-
-def search_projection_path(project_root: Path | None = None) -> Path:
-    """Return path to the search projection JSON file."""
-    return projections_root(project_root) / SEARCH_PROJECTION_FILE
+def brief_path(project_root: Path | None = None) -> Path:
+    """Return path to .memory/BRIEF.md."""
+    return memory_root(project_root) / BRIEF_FILE
 
 
 def docs_file_ref(bucket: str, filename: str) -> str:

@@ -46,8 +46,12 @@ class TestPaths:
         assert mp == Path("/project/.memory/catalog/modules/auth.md")
 
     def test_store_db_path(self):
-        db = paths.store_db_path(Path("/project"))
-        assert db == Path("/project/.memory/_store/memory.db")
+        inbox = paths.inbox_root(Path("/project"))
+        assert inbox == Path("/project/.memory/inbox")
+
+    def test_brief_path(self):
+        brief = paths.brief_path(Path("/project"))
+        assert brief == Path("/project/.memory/BRIEF.md")
 
     def test_manifest_path(self):
         manifest = paths.manifest_path(Path("/project"))

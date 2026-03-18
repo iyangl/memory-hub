@@ -1,9 +1,0 @@
-{
-  "layout_version": "2F",
-  "docs_root": "docs",
-  "catalog_root": "catalog",
-  "store_root": "_store",
-  "store_db": "_store/memory.db",
-  "projection_root": "_store/projections",
-  "project_scope": "project"
-}

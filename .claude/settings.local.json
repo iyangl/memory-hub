@@ -15,7 +15,11 @@
       "mcp__memory-hub__show_memory_review",
       "mcp__sequential-thinking__sequentialthinking",
       "Bash(find:*)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(python3:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(PYTHONPATH=/Users/sunpure/Documents/Code/memory-hub python3:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

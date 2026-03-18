@@ -22,12 +22,11 @@ TOPICS_SKELETON = """\
 """
 
 MANIFEST = {
-    "layout_version": "2F",
+    "layout_version": "3",
     "docs_root": "docs",
     "catalog_root": "catalog",
-    "store_root": "_store",
-    "store_db": "_store/memory.db",
-    "projection_root": "_store/projections",
+    "inbox_root": "inbox",
+    "brief_file": "BRIEF.md",
     "project_scope": "project",
 }
 
@@ -64,9 +63,9 @@ def run(args: list[str]) -> None:
     atomic_write(topics_file, TOPICS_SKELETON)
     created_files.append("catalog/topics.md")
 
-    store_dir = paths.store_root(project_root)
-    store_dir.mkdir(parents=True, exist_ok=True)
-    paths.projections_root(project_root).mkdir(parents=True, exist_ok=True)
+    # Create inbox directory
+    inbox_dir = paths.inbox_root(project_root)
+    inbox_dir.mkdir(parents=True, exist_ok=True)
 
     manifest_file = paths.manifest_path(project_root)
     atomic_write(manifest_file, json.dumps(MANIFEST, ensure_ascii=False, indent=2) + "\n")

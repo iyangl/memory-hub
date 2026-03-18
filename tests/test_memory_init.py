@@ -46,8 +46,8 @@ class TestInit:
         assert (root / "docs" / "qa" / "strategy.md").exists()
         assert (root / "catalog" / "topics.md").exists()
         assert (root / "catalog" / "modules").is_dir()
-        assert (root / "_store").is_dir()
-        assert (root / "_store" / "projections").is_dir()
+        assert (root / "inbox").is_dir()
+        assert not (root / "_store").exists()
         assert (root / "manifest.json").exists()
 
     def test_topics_has_skeleton(self, tmp_project):
@@ -56,7 +56,7 @@ class TestInit:
         assert "## 代码模块" in content
         assert "## 知识文件" in content
         manifest = json.loads((tmp_project / ".memory" / "manifest.json").read_text(encoding="utf-8"))
-        assert manifest["layout_version"] == "2F"
+        assert manifest["layout_version"] == "3"
 
     def test_already_initialized(self, tmp_project):
         run_init(tmp_project)
