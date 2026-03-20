@@ -129,3 +129,69 @@ class TestCatalogRepair:
         # Base files are not registered, should be in ai_actions
         missing = [a for a in result["data"]["ai_actions"] if a["type"] == "missing_registration"]
         assert len(missing) > 0
+
+
+class TestCatalogUpdateValidation:
+    def test_sanitizes_module_name(self, initialized_project):
+        modules_json = json.dumps({
+            "modules": [{"name": "My Module", "summary": "test", "files": []}]
+        })
+        json_file = initialized_project / "modules.json"
+        json_file.write_text(modules_json, encoding="utf-8")
+        result, code = run_cmd("lib.catalog_update",
+                               ["--file", str(json_file),
+                                "--project-root", str(initialized_project)])
+        assert code == 0
+        assert "my-module" in result["data"]["modules_written"]
+        module_file = initialized_project / ".memory" / "catalog" / "modules" / "my-module.md"
+        assert module_file.exists()
+
+    def test_skips_invalid_module_missing_name(self, initialized_project):
+        modules_json = json.dumps({
+            "modules": [
+                {"name": "", "summary": "empty name", "files": []},
+                {"name": "valid", "summary": "ok", "files": []},
+            ]
+        })
+        json_file = initialized_project / "modules.json"
+        json_file.write_text(modules_json, encoding="utf-8")
+        result, code = run_cmd("lib.catalog_update",
+                               ["--file", str(json_file),
+                                "--project-root", str(initialized_project)])
+        assert code == 0
+        assert "valid" in result["data"]["modules_written"]
+        assert len(result["data"]["modules_skipped"]) == 1
+        assert result["data"]["modules_skipped"][0]["reason"] == "missing or empty 'name'"
+
+    def test_skips_invalid_files_field(self, initialized_project):
+        modules_json = json.dumps({
+            "modules": [{"name": "bad", "summary": "x", "files": "not-a-list"}]
+        })
+        json_file = initialized_project / "modules.json"
+        json_file.write_text(modules_json, encoding="utf-8")
+        result, code = run_cmd("lib.catalog_update",
+                               ["--file", str(json_file),
+                                "--project-root", str(initialized_project)])
+        assert code == 0
+        assert len(result["data"]["modules_skipped"]) == 1
+        skipped_actions = [a for a in result["ai_actions"] if a["type"] == "invalid_module_skipped"]
+        assert len(skipped_actions) == 1
+
+    def test_mixed_valid_invalid_modules(self, initialized_project):
+        modules_json = json.dumps({
+            "modules": [
+                {"name": "good", "summary": "works", "files": []},
+                {"summary": "no name field", "files": []},
+                {"name": "also-good", "summary": "fine", "files": [{"path": "a.py", "description": ""}]},
+            ]
+        })
+        json_file = initialized_project / "modules.json"
+        json_file.write_text(modules_json, encoding="utf-8")
+        result, code = run_cmd("lib.catalog_update",
+                               ["--file", str(json_file),
+                                "--project-root", str(initialized_project)])
+        assert code == 0
+        written = result["data"]["modules_written"]
+        assert "good" in written
+        assert "also-good" in written
+        assert len(result["data"]["modules_skipped"]) == 1

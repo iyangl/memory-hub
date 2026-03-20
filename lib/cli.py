@@ -16,6 +16,7 @@ COMMANDS = {
     "catalog-update": "lib.catalog_update",
     "catalog-repair": "lib.catalog_repair",
     "brief": "lib.brief",
+    "scan-modules": "lib.scan_modules",
 }
 
 
