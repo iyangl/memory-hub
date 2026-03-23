@@ -120,12 +120,93 @@ def _list_source_files(
     return files
 
 
-def _pick_notable_files(files: list[str]) -> list[str]:
-    """Pick notable files first, then fill up to MAX_FILES_PER_MODULE."""
-    notable = [f for f in files if Path(f).name in NOTABLE_PATTERNS]
-    rest = [f for f in files if f not in notable]
-    result = notable + rest
-    return result[:MAX_FILES_PER_MODULE]
+def _pick_notable_files(
+    files: list[str], module_prefix: str = "",
+) -> list[str]:
+    """Pick notable files with per-subdirectory representation.
+
+    Strategy: each direct subdirectory gets at least 1 representative
+    (NOTABLE_PATTERNS preferred), remaining budget fills from top.
+    """
+    if not files:
+        return []
+
+    # Group files by their direct subdirectory (relative to module)
+    subdir_groups: dict[str, list[str]] = {}
+    for f in files:
+        rel = f[len(module_prefix):] if module_prefix and f.startswith(module_prefix) else f
+        parts = Path(rel).parts
+        key = parts[0] if len(parts) > 1 else ""
+        subdir_groups.setdefault(key, []).append(f)
+
+    selected: list[str] = []
+    selected_set: set[str] = set()
+
+    # Phase 1: one representative per subdirectory
+    for _subdir, group in sorted(subdir_groups.items()):
+        if len(selected) >= MAX_FILES_PER_MODULE:
+            break
+        notable = [f for f in group if Path(f).name in NOTABLE_PATTERNS]
+        pick = notable[0] if notable else group[0]
+        if pick not in selected_set:
+            selected.append(pick)
+            selected_set.add(pick)
+
+    # Phase 2: fill remaining budget with notable files first
+    budget = MAX_FILES_PER_MODULE - len(selected)
+    if budget > 0:
+        remaining_notable = [
+            f for f in files
+            if f not in selected_set and Path(f).name in NOTABLE_PATTERNS
+        ]
+        for f in remaining_notable[:budget]:
+            selected.append(f)
+            selected_set.add(f)
+            budget -= 1
+
+    # Phase 3: fill rest
+    if budget > 0:
+        rest = [f for f in files if f not in selected_set]
+        for f in rest[:budget]:
+            selected.append(f)
+            selected_set.add(f)
+
+    return selected
+
+
+def _build_dir_tree(
+    files: list[str], module_prefix: str, max_depth: int = 2,
+) -> str:
+    """Build a compact directory tree string with file counts per subdir."""
+    tree: dict[str, int] = {}
+    for f in files:
+        rel = f[len(module_prefix):] if module_prefix and f.startswith(module_prefix) else f
+        parts = Path(rel).parts
+        # Count in each ancestor directory up to max_depth
+        for depth in range(1, min(len(parts), max_depth + 1)):
+            dir_path = "/".join(parts[:depth])
+            tree.setdefault(dir_path, 0)
+        # Count file in its immediate parent
+        if len(parts) > 1:
+            parent = "/".join(parts[:-1])
+            # Only count at leaf-most tracked dir
+            leaf_depth = min(len(parts) - 1, max_depth)
+            leaf = "/".join(parts[:leaf_depth])
+            tree[leaf] = tree.get(leaf, 0) + 1
+        else:
+            tree[""] = tree.get("", 0) + 1
+
+    # Build output lines with indentation
+    lines = []
+    root_count = tree.pop("", 0)
+    for dir_path in sorted(tree):
+        depth = dir_path.count("/")
+        name = dir_path.split("/")[-1]
+        indent = "  " * depth
+        count = tree[dir_path]
+        lines.append(f"{indent}{name}/ ({count} files)")
+
+    return "\n".join(lines)
 
 
 def _is_module_dir(directory: Path, root: Path, tracked: set[str] | None) -> bool:
@@ -165,22 +246,34 @@ def _discover_modules(root: Path) -> list[dict]:
                     continue
                 files = _list_source_files(sub, root, tracked)
                 if files:
+                    prefix = f"{item.name}/{sub.name}/"
                     seen_dirs.add(sub)
                     modules.append({
                         "name": f"{item.name}/{sub.name}",
                         "summary": "",
-                        "files": [{"path": f, "description": ""} for f in _pick_notable_files(files)],
+                        "total_files": len(files),
+                        "dir_tree": _build_dir_tree(files, prefix),
+                        "files": [
+                            {"path": f, "description": ""}
+                            for f in _pick_notable_files(files, prefix)
+                        ],
                     })
         else:
             if not _is_module_dir(item, root, tracked):
                 continue
             files = _list_source_files(item, root, tracked)
             if files:
+                prefix = f"{item.name}/"
                 seen_dirs.add(item)
                 modules.append({
                     "name": item.name,
                     "summary": "",
-                    "files": [{"path": f, "description": ""} for f in _pick_notable_files(files)],
+                    "total_files": len(files),
+                    "dir_tree": _build_dir_tree(files, prefix),
+                    "files": [
+                        {"path": f, "description": ""}
+                        for f in _pick_notable_files(files, prefix)
+                    ],
                 })
 
     # Collect root-level source files as a "root" module
@@ -197,7 +290,12 @@ def _discover_modules(root: Path) -> list[dict]:
         modules.insert(0, {
             "name": "root",
             "summary": "",
-            "files": [{"path": f, "description": ""} for f in _pick_notable_files(root_files)],
+            "total_files": len(root_files),
+            "dir_tree": "",
+            "files": [
+                {"path": f, "description": ""}
+                for f in _pick_notable_files(root_files)
+            ],
         })
 
     return modules

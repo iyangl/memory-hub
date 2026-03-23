@@ -19,7 +19,10 @@
       "Bash(python3:*)",
       "Bash(ls:*)",
       "Bash(wc:*)",
-      "Bash(PYTHONPATH=/Users/sunpure/Documents/Code/memory-hub python3:*)"
+      "Bash(PYTHONPATH=/Users/sunpure/Documents/Code/memory-hub python3:*)",
+      "WebSearch",
+      "WebFetch(domain:gist.github.com)",
+      "WebFetch(domain:github.com)"
     ]
   },
   "enableAllProjectMcpServers": true,

@@ -98,6 +98,73 @@ class TestCatalogUpdate:
         assert "old.md" in result["data"]["modules_deleted"]
         assert not old.exists()
 
+    def test_new_format_with_all_sections(self, initialized_project):
+        """Module with all optional fields should produce rich markdown."""
+        modules_json = json.dumps({
+            "modules": [{
+                "name": "auth",
+                "summary": "认证模块",
+                "purpose": "处理用户登录、注册和会话管理。基于 JWT 实现无状态认证。",
+                "key_abstractions": [
+                    "AuthService — 认证核心逻辑",
+                    "JwtHelper — Token 生成和验证",
+                ],
+                "internal_deps": [
+                    "database — 用户数据存储",
+                    "config — JWT 密钥配置",
+                ],
+                "dir_tree": "handlers/ (3 files)\nmodels/ (2 files)",
+                "files": [
+                    {"path": "auth/service.py", "description": "认证服务入口"},
+                    {"path": "auth/jwt.py", "description": "JWT 工具"},
+                ],
+            }]
+        })
+        json_file = initialized_project / "modules.json"
+        json_file.write_text(modules_json, encoding="utf-8")
+        result, code = run_cmd("lib.catalog_update",
+                               ["--file", str(json_file),
+                                "--project-root", str(initialized_project)])
+        assert code == 0
+        module_file = initialized_project / ".memory" / "catalog" / "modules" / "auth.md"
+        content = module_file.read_text(encoding="utf-8")
+        assert "## 职责" in content
+        assert "处理用户登录" in content
+        assert "## 关键抽象" in content
+        assert "AuthService" in content
+        assert "## 内部依赖" in content
+        assert "database" in content
+        assert "## 目录结构" in content
+        assert "handlers/" in content
+        assert "## 代表文件" in content
+        assert "`auth/service.py`" in content
+
+    def test_new_format_graceful_degrade(self, initialized_project):
+        """Module missing optional fields should still produce valid markdown."""
+        modules_json = json.dumps({
+            "modules": [{
+                "name": "simple",
+                "summary": "简单模块",
+                "files": [{"path": "simple/main.py", "description": ""}],
+            }]
+        })
+        json_file = initialized_project / "modules.json"
+        json_file.write_text(modules_json, encoding="utf-8")
+        result, code = run_cmd("lib.catalog_update",
+                               ["--file", str(json_file),
+                                "--project-root", str(initialized_project)])
+        assert code == 0
+        module_file = initialized_project / ".memory" / "catalog" / "modules" / "simple.md"
+        content = module_file.read_text(encoding="utf-8")
+        assert "# simple" in content
+        assert "> 简单模块" in content
+        assert "## 代表文件" in content
+        # Optional sections should NOT appear
+        assert "## 职责" not in content
+        assert "## 关键抽象" not in content
+        assert "## 内部依赖" not in content
+        assert "## 目录结构" not in content
+
 
 class TestCatalogRepair:
     def test_detects_dead_links(self, initialized_project):

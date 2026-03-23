@@ -18,16 +18,45 @@ TOPICS_KNOWLEDGE_HEADER = "## 知识文件"
 
 
 def _generate_module_md(module: dict) -> str:
-    """Generate markdown content for a module index file."""
-    summary = module.get("summary", "")
+    """Generate markdown content for a module index file.
+
+    Supports optional sections: purpose, key_abstractions,
+    internal_deps, dir_tree. Missing fields degrade gracefully.
+    """
     lines = [f"# {module['name']}"]
+
+    summary = module.get("summary", "")
     if summary:
         lines += ["", f"> {summary}"]
-    lines.append("")
-    for f in module.get("files", []):
-        desc = f.get("description", "")
-        path = f.get("path", "")
-        lines.append(f"- {path} — {desc}" if desc else f"- {path}")
+
+    purpose = module.get("purpose", "")
+    if purpose:
+        lines += ["", "## 职责", "", purpose]
+
+    abstractions = module.get("key_abstractions", [])
+    if abstractions:
+        lines += ["", "## 关键抽象"]
+        for item in abstractions:
+            lines.append(f"- {item}")
+
+    deps = module.get("internal_deps", [])
+    if deps:
+        lines += ["", "## 内部依赖"]
+        for item in deps:
+            lines.append(f"- {item}")
+
+    dir_tree = module.get("dir_tree", "")
+    if dir_tree:
+        lines += ["", "## 目录结构", "", "```", dir_tree, "```"]
+
+    files = module.get("files", [])
+    if files:
+        lines += ["", "## 代表文件"]
+        for f in files:
+            desc = f.get("description", "")
+            path = f.get("path", "")
+            lines.append(f"- `{path}` — {desc}" if desc else f"- `{path}`")
+
     lines.append("")
     return "\n".join(lines)
 
