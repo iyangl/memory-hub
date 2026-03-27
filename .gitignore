@@ -20,3 +20,4 @@ htmlcov/
 # Memory Hub v3 — inbox 是临时写入区，不跟踪
 .memory/inbox/
 !.memory/inbox/.gitkeep
+!.claude/
