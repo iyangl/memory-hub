@@ -1,58 +1,20 @@
-# 需求结论与产品决策
+# Memory Hub 产品结论
 
-## v3 产品决策 — 2026-03-16 ~ 2026-03-18
+## Recall-first 产品结论
 
-### 结论 v3-1：Skill-Driven 架构替代规则驱动
+- recall 的目标是先定位再读取，而不是把所有 docs 一次性读完。
+- `light` 只读取少量最相关 docs / module cards；`deep` 才构建压缩后的 `working-set`。
+- 当 planner 返回 `search_first = true` 时，必须先搜索，再依据回填结果决定最终来源与 recall 深度。
+- `noop` 是合法结果，不需要为了保存而保存。
 
-背景：v2 的大量复杂度花在"控制 LLM 怎么用记忆系统"上，但 LLM 大概率无法可靠遵守 300+ 行流程规则。上下文窗口增长（200k+）改变了前提——项目知识可以直接作为上下文存在。
+## Durable save 口径
 
-结论：
-- 从"用规则约束 LLM 行为"转向"用固定 workflow 模板驱动 LLM 执行"
-- 三个 command：/init（首次扫描）、/recall（加载记忆）、/save（保存记忆）
-- 用户显式控制流程切换，不依赖 LLM 自觉
+- 每条候选知识都必须显式判定为 `noop | create | append | merge | update`。
+- 能 `merge` 或 `append` 就不要 `create`；`update` 只用于明确替换已过时的长期结论。
+- 非 `noop` 保存必须先 search 并读取目标 doc；working set 只能提炼，不能原样写回。
+- `create` 需要补 `index`；`append` 只新增独立 section；`merge / update` 由上层提供完整合并后的 doc。
 
-### 结论 v3-2：三层信任模型
+## 初始化与使用范围
 
-背景：需要平衡确定性和灵活性。
-
-结论：
-- Layer 1（/recall）：用户显式调用，100% 可靠
-- Layer 2（LLM 自主写 inbox）：最佳努力，遵守就赚到，不遵守不影响
-- Layer 3（/save）：用户显式调用，确定性入口 + LLM 辅助执行
-
-### 结论 v3-3：移除全部 v2 复杂度
-
-背景：MCP server、durable store、proposal/review 状态机、discovery lane、session-extract 增加了大量维护成本，但实际使用频率低。
-
-结论：
-- MCP server（7 个 tool）整体移除
-- durable store（SQLite + proposal/review/rollback）整体移除
-- discovery lane 移除
-- session-extract 移除
-- 归档到 .archive/，保留 git history 可追溯
-
-### 结论 v3-4：docs/ 是唯一正本
-
-背景：v2 中 docs lane 和 durable store 双正本带来"该写哪里"的认知负担。
-
-结论：
-- docs/ 固定为唯一正本
-- BRIEF.md 和 catalog/ 都是派生产物，可从 docs 重建
-- 不存在"两个正本冲突"的可能
-
-### 结论 v3-5：跨平台一致性
-
-背景：Claude Code 和 Codex 的能力差异不应导致行为差异。
-
-结论：
-- 不依赖 hooks、不依赖 MCP、不依赖规则遵从
-- 两个平台使用同一份 workflow 模板
-- Codex 通过 AGENTS.md 引用 .claude/commands/ 模板
-
----
-
-## v1-v2 历史结论（已归档）
-
-v1-v2 阶段的 15 条产品结论记录了从 v1 MVP 到 v2 统一记忆面的演进过程，包括：durable memory 收口、统一目录收敛、skill 入口精简、docs lane 主从关系确立、统一写入口、review surface、hybrid recall、session-extract、decision discovery 等决策。
-
-这些结论在 v3 中已不适用（相关组件已归档），完整历史记录见 `.archive/` 目录下的方案文档。
+- `/memory-hub:init` 只在 `.memory/` 不存在时使用；已有记忆时应转用 `/memory-hub:recall`、`brief` 或 `catalog-repair`。
+- `.memory/inbox/` 只是 Layer 2 暂存区；是否进入长期 docs，由 `/memory-hub:save` 和 save core 决定。

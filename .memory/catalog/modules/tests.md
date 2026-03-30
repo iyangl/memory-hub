@@ -1,19 +1,45 @@
 # tests
 
-> 单元测试：核心模块与 durable memory Phase 1A~Phase 2F 契约测试
+> 基于 11 个跟踪文件生成的模块导航，代表文件：`tests/__init__.py`、`tests/test_brief.py`。
 
-- tests/durable_test_support.py — durable memory 测试数据、DB 辅助函数与 CLI 运行助手
-- tests/test_catalog.py — catalog read/update/repair 测试
-- tests/test_durable_cli.py — review/rollback CLI 与 docs review 契约测试
-- tests/test_durable_proposals.py — proposal、write guard 与 approved search 测试
-- tests/test_durable_review.py — approve、reject、rollback 事务测试
-- tests/test_durable_schema.py — schema bootstrap、Phase 2C~2E 列扩展与 boot memory 顺序测试
-- tests/test_envelope.py — JSON envelope 测试
-- tests/test_mcp_server.py — MCP initialize/tools/list/tools/call、review surface 与 hybrid recall 契约测试
-- tests/test_memory_index.py — index 命令测试
-- tests/test_memory_init.py — init 命令测试
-- tests/test_memory_list_search.py — list/search 命令测试
-- tests/test_memory_read.py — read 命令测试
-- tests/test_paths.py — 路径工具测试
-- tests/test_decision_discovery.py — discovery Phase 1 测试：默认规则突破、新例外规则、docs drift 与噪音控制
-- tests/test_session_extract.py — Phase 2F 会话提炼候选、route 分类与 unified write 落地测试
+## 何时阅读
+
+当任务涉及验证策略、回归范围或测试入口时阅读；先看 `tests/__init__.py`、`tests/test_brief.py`。
+
+## 推荐入口
+- `tests/__init__.py`
+- `tests/test_brief.py`
+- `tests/test_catalog.py`
+
+## 推荐阅读顺序
+- `tests/__init__.py`
+- `tests/test_brief.py`
+- `tests/test_catalog.py`
+- `tests/test_envelope.py`
+- `tests/test_memory_index.py`
+
+## 隐含约束
+- 先从 `tests/__init__.py`、`tests/test_brief.py` 定位模块边界，再决定是否继续下钻。
+
+## 主要风险
+- 测试文件 `tests/test_brief.py`、`tests/test_catalog.py` 只反映验证方式，不等于真实运行入口。
+
+## 验证重点
+- 确认测试入口 `tests/__init__.py`、`tests/test_brief.py` 覆盖的行为与当前任务相关。
+
+## 代表文件
+- `tests/__init__.py`
+- `tests/test_brief.py`
+- `tests/test_catalog.py`
+- `tests/test_envelope.py`
+- `tests/test_memory_index.py`
+- `tests/test_memory_init.py`
+- `tests/test_memory_list_search.py`
+- `tests/test_memory_read.py`
+- `tests/test_paths.py`
+- `tests/test_scan_modules.py`
+- `tests/test_utils.py`
+
+## 关联记忆
+- `docs/architect/decisions.md`
+- `docs/qa/strategy.md`

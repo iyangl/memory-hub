@@ -9,12 +9,12 @@ import argparse
 from pathlib import Path
 
 from lib import envelope, paths
+from lib.utils import sanitize_module_name
 
 
 def run(args: list[str]) -> None:
     parser = argparse.ArgumentParser(prog="memory-hub catalog-read")
-    parser.add_argument("target", nargs="?", default="topics",
-                        help="'topics' or a module name")
+    parser.add_argument("target", nargs="?", default="topics", help="'topics' or a module name")
     parser.add_argument("--project-root", help="Project root directory", default=None)
     parsed = parser.parse_args(args)
 
@@ -23,7 +23,7 @@ def run(args: list[str]) -> None:
     if parsed.target == "topics":
         fp = paths.topics_path(project_root)
     else:
-        fp = paths.module_file_path(parsed.target, project_root)
+        fp = paths.module_file_path(sanitize_module_name(parsed.target), project_root)
 
     if not fp.exists():
         envelope.fail("CATALOG_NOT_FOUND", f"Catalog file not found: {fp.name}")

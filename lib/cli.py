@@ -17,6 +17,9 @@ COMMANDS = {
     "catalog-repair": "lib.catalog_repair",
     "brief": "lib.brief",
     "scan-modules": "lib.scan_modules",
+    "recall-plan": "lib.recall_planner",
+    "working-set": "lib.session_working_set",
+    "save": "lib.memory_save",
 }
 
 
@@ -28,7 +31,6 @@ def main() -> None:
     if cmd not in COMMANDS:
         system_error(f"Unknown command: {cmd}\nAvailable: {', '.join(COMMANDS)}")
 
-    # Dynamic import to avoid loading all modules upfront
     import importlib
     module = importlib.import_module(COMMANDS[cmd])
     module.run(sys.argv[2:])

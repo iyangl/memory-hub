@@ -4,7 +4,7 @@ description: '加载项目记忆到当前上下文'
 
 # /memory-hub:recall — 加载项目记忆
 
-读取 BRIEF.md 将项目知识注入当前会话上下文，支持按需深入阅读完整文档。
+按 recall-first 协议加载项目记忆：先读 base brief，再判定是否需要 search / light / deep recall。
 
 ## 上下文
 
@@ -14,63 +14,93 @@ description: '加载项目记忆到当前上下文'
 
 ## 执行流程
 
-### Step 1：读取 BRIEF.md
+### Step 1：确保 recall 上下文存在
+
+如果仓库尚未初始化 `.memory/`，先执行：
 
 ```bash
-cat .memory/BRIEF.md
+py -3 -m lib.cli init
 ```
 
-- **文件存在** → 读取内容，继续 Step 2
-- **文件不存在** → 降级处理：
+如果 `.memory/` 已存在，至少重建 BRIEF：
 
 ```bash
-python3 -m lib.cli brief
-cat .memory/BRIEF.md
+py -3 -m lib.cli brief
 ```
 
-### Step 2：注入上下文
+注意：`brief` 只负责重建 `BRIEF.md`，不负责补齐整个 catalog；未初始化时必须先 `init`。
 
-将 BRIEF.md 的内容作为项目背景知识记住。这些信息包括：
-- 项目技术栈和关键约束
-- 开发约定
-- 产品决策
-- 测试策略
+### Step 2：读取 base brief
 
-### Step 3：按需深入
+读取 `.memory/BRIEF.md`，将其作为 boot summary 注入上下文。
 
-如果用户提供了任务描述（$ARGUMENTS），根据 BRIEF.md 中的信息判断是否需要读取完整文档。
+### Step 3：执行 recall-plan 并保存结果
 
-判断标准：BRIEF.md 中的摘要是否已经包含足够的上下文来完成任务？
-
-- **摘要足够** → 直接开始工作
-- **需要深入** → 读取相关完整文档：
+如果用户提供了任务描述（`$ARGUMENTS`），先执行：
 
 ```bash
-python3 -m lib.cli read <bucket> <filename>
+py -3 -m lib.cli recall-plan --task "$ARGUMENTS" --out .memory/session/recall-plan.json
 ```
 
-也可以通过搜索定位相关文档：
+planner 的职责：
+- 判断 `skip | light | deep`
+- 判断 `task_kind`
+- 判断是否需要 `search_first`
+- 推荐相关 docs / modules
+- 给出 `why_these`
+- 明确 `evidence_gaps`
+
+### Step 4：Search Before Guess
+
+如果 planner 返回 `search_first = true`：
+
+1. 先 search / catalog-read 定位相关对象
+2. 再决定应该读取哪些 docs 或 module cards
+3. 不允许仅凭任务文本直接猜来源
+
+可用命令：
 
 ```bash
-python3 -m lib.cli search "<关键词>"
+py -3 -m lib.cli search "<关键词>"
+py -3 -m lib.cli catalog-read topics
+py -3 -m lib.cli catalog-read <module>
+py -3 -m lib.cli read <bucket> <filename>
 ```
 
-### Step 4：确认就绪
+### Step 5：按 recall 深度执行
 
-向用户简短确认已加载的知识范围：
+#### `skip`
+- 不再额外读取，直接开始工作
+- 或仅补充读取极少量高相关来源
 
+#### `light`
+- 读取 base brief + 少量相关 docs / module cards
+- 推荐来源时必须说明 `why_these`
+
+#### `deep`
+- 先根据 planner 结果构建 working set：
+
+```bash
+py -3 -m lib.cli working-set --plan-file .memory/session/recall-plan.json
 ```
-已加载项目记忆：
-- <列出 BRIEF.md 中的主要知识领域>
-- <如果深入读取了额外文档，列出>
 
-可以开始工作了。
-```
+- working set 会把高相关来源压缩成去重、限长、可直接消费的任务上下文
+- module item 会尽量带上约束、风险、验证重点
+- 再把 working set 注入当前上下文
+- 如果 `evidence_gaps` 仍存在，先补读，再开始工作
+
+### Step 6：确认就绪
+
+向用户简短确认：
+- 已读取的知识范围
+- recall level
+- 若为 deep，说明已生成 working set
+- 若仍有 evidence gaps，明确列出
 
 ---
 
 ## 注意事项
 
-- 长会话中如果感觉项目上下文变得模糊，可以重新调用本命令刷新
-- BRIEF.md 是 docs/ 的派生摘要，不包含独有数据
-- 如需更新 BRIEF.md 内容，应通过 `/memory-hub:save` 先更新 docs，BRIEF.md 会自动重建
+- BRIEF.md 是派生产物，不直接手改
+- recall 的核心不是“读得越多越好”，而是“先定位、再决定读什么”
+- 长会话中如果感觉上下文变得模糊，可以重新调用 `/memory-hub:recall`

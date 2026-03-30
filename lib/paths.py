@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 # Valid bucket names
 BUCKETS = ("pm", "architect", "dev", "qa")
@@ -15,13 +15,14 @@ BASE_FILES: dict[str, list[str]] = {
     "qa": ["strategy.md"],
 }
 
-# Catalog paths
+# Catalog / memory paths
 CATALOG_DIR = "catalog"
 TOPICS_FILE = "topics.md"
 MODULES_DIR = "modules"
 DOCS_DIR = "docs"
 MANIFEST_FILE = "manifest.json"
 INBOX_DIR = "inbox"
+SESSION_DIR = "session"
 BRIEF_FILE = "BRIEF.md"
 
 
@@ -76,9 +77,45 @@ def inbox_root(project_root: Path | None = None) -> Path:
     return memory_root(project_root) / INBOX_DIR
 
 
+def session_root(project_root: Path | None = None) -> Path:
+    """Return the .memory/session/ directory path."""
+    return memory_root(project_root) / SESSION_DIR
+
+
+def session_file_path(slug: str, suffix: str = ".json", project_root: Path | None = None) -> Path:
+    """Return path to .memory/session/<slug><suffix>."""
+    return session_root(project_root) / f"{slug}{suffix}"
+
+
 def brief_path(project_root: Path | None = None) -> Path:
     """Return path to .memory/BRIEF.md."""
     return memory_root(project_root) / BRIEF_FILE
+
+
+def validate_docs_filename(filename: str) -> str | None:
+    """Return error code if a docs filename is invalid, None if valid."""
+    if not isinstance(filename, str):
+        return "INVALID_DOCS_FILENAME"
+
+    candidate = filename.strip()
+    if not candidate:
+        return "INVALID_DOCS_FILENAME"
+
+    if candidate != Path(candidate).name:
+        return "INVALID_DOCS_FILENAME"
+
+    posix = PurePosixPath(candidate)
+    windows = PureWindowsPath(candidate)
+    if posix.is_absolute() or windows.is_absolute():
+        return "INVALID_DOCS_FILENAME"
+
+    if any(part == ".." for part in posix.parts) or any(part == ".." for part in windows.parts):
+        return "INVALID_DOCS_FILENAME"
+
+    if any(separator in candidate for separator in ("/", "\\")):
+        return "INVALID_DOCS_FILENAME"
+
+    return None
 
 
 def docs_file_ref(bucket: str, filename: str) -> str:

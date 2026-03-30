@@ -28,6 +28,26 @@ class TestIsBaseFile:
         assert paths.is_base_file("architect", "custom.md") is False
 
 
+class TestValidateDocsFilename:
+    def test_valid_docs_filename(self):
+        assert paths.validate_docs_filename("decisions.md") is None
+        assert paths.validate_docs_filename("caching.md") is None
+
+    def test_rejects_blank_filename(self):
+        assert paths.validate_docs_filename("") == "INVALID_DOCS_FILENAME"
+        assert paths.validate_docs_filename("   ") == "INVALID_DOCS_FILENAME"
+
+    def test_rejects_path_traversal_or_separators(self):
+        assert paths.validate_docs_filename("../secret.md") == "INVALID_DOCS_FILENAME"
+        assert paths.validate_docs_filename("nested/file.md") == "INVALID_DOCS_FILENAME"
+        assert paths.validate_docs_filename(r"nested\\file.md") == "INVALID_DOCS_FILENAME"
+
+    def test_rejects_absolute_paths(self):
+        assert paths.validate_docs_filename("/tmp/secret.md") == "INVALID_DOCS_FILENAME"
+        assert paths.validate_docs_filename("C:/temp/secret.md") == "INVALID_DOCS_FILENAME"
+        assert paths.validate_docs_filename(r"C:\\temp\\secret.md") == "INVALID_DOCS_FILENAME"
+
+
 class TestPaths:
     def test_memory_root(self):
         root = paths.memory_root(Path("/project"))
@@ -45,9 +65,17 @@ class TestPaths:
         mp = paths.module_file_path("auth", Path("/project"))
         assert mp == Path("/project/.memory/catalog/modules/auth.md")
 
-    def test_store_db_path(self):
+    def test_inbox_path(self):
         inbox = paths.inbox_root(Path("/project"))
         assert inbox == Path("/project/.memory/inbox")
+
+    def test_session_path(self):
+        session = paths.session_root(Path("/project"))
+        assert session == Path("/project/.memory/session")
+
+    def test_session_file_path(self):
+        fp = paths.session_file_path("foo", ".json", Path("/project"))
+        assert fp == Path("/project/.memory/session/foo.json")
 
     def test_brief_path(self):
         brief = paths.brief_path(Path("/project"))

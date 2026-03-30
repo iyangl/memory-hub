@@ -12,24 +12,15 @@ from pathlib import Path
 from lib import envelope, paths
 
 
-def run(args: list[str]) -> None:
-    parser = argparse.ArgumentParser(prog="memory-hub search")
-    parser.add_argument("query", help="Search query (substring or regex)")
-    parser.add_argument("--context", type=int, default=1, help="Lines of context around match")
-    parser.add_argument("--project-root", help="Project root directory", default=None)
-    parsed = parser.parse_args(args)
-
-    project_root = Path(parsed.project_root) if parsed.project_root else None
+def search_docs(query: str, project_root: Path | None = None, context: int = 1) -> list[dict]:
     root = paths.memory_root(project_root)
-
     if not root.exists():
-        envelope.fail("NOT_INITIALIZED", ".memory/ directory not found. Run memory-hub init first.")
+        raise FileNotFoundError(".memory/ directory not found. Run memory-hub init first.")
 
     try:
-        pattern = re.compile(parsed.query, re.IGNORECASE)
+        pattern = re.compile(query, re.IGNORECASE)
     except re.error:
-        # Fall back to literal substring
-        pattern = re.compile(re.escape(parsed.query), re.IGNORECASE)
+        pattern = re.compile(re.escape(query), re.IGNORECASE)
 
     results = []
     for bucket in paths.BUCKETS:
@@ -44,13 +35,29 @@ def run(args: list[str]) -> None:
                 continue
             for i, line in enumerate(lines):
                 if pattern.search(line):
-                    start = max(0, i - parsed.context)
-                    end = min(len(lines), i + parsed.context + 1)
+                    start = max(0, i - context)
+                    end = min(len(lines), i + context + 1)
                     results.append({
                         "file": rel,
                         "line_number": i + 1,
                         "line_content": line,
                         "context": lines[start:end],
                     })
+    return results
+
+
+def run(args: list[str]) -> None:
+    parser = argparse.ArgumentParser(prog="memory-hub search")
+    parser.add_argument("query", help="Search query (substring or regex)")
+    parser.add_argument("--context", type=int, default=1, help="Lines of context around match")
+    parser.add_argument("--project-root", help="Project root directory", default=None)
+    parsed = parser.parse_args(args)
+
+    project_root = Path(parsed.project_root) if parsed.project_root else None
+
+    try:
+        results = search_docs(parsed.query, project_root, parsed.context)
+    except FileNotFoundError:
+        envelope.fail("NOT_INITIALIZED", ".memory/ directory not found. Run memory-hub init first.")
 
     envelope.ok({"query": parsed.query, "matches": results, "total": len(results)})

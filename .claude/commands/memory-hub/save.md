@@ -4,7 +4,7 @@ description: '提炼并持久化本次会话中的项目知识'
 
 # /memory-hub:save — 保存项目记忆
 
-从当前会话和 inbox 中提炼有价值的知识，合并到 docs/ 正本，重建 BRIEF.md。
+按 recall-first contract 提炼 durable knowledge，生成结构化 `save-request`，再调用代码级 `save` core 执行写入与重建。
 
 ## 上下文
 
@@ -14,164 +14,122 @@ description: '提炼并持久化本次会话中的项目知识'
 
 ## 执行流程
 
-### Step 1：收集待保存知识
+### Step 1：收集候选知识
 
-从两个来源收集：
+来源包括：
+1. `.memory/inbox/*.md`
+2. 当前会话中的决策、约束、风险、验证策略、业务口径
+3. 当前任务的 working set（只作为提炼原料，不可原样写回）
 
-#### 1a. 扫描 inbox
+### Step 2：后悔测试
+
+对每条候选知识先问：
+
+> 本次会话结束后，如果没记下来，未来继续此项目的人会不会后悔？
+
+若答案是否：
+- 直接判定为 `noop`
+- 不进入长期 docs
+
+### Step 3：Search Before Write / Read Before Write
+
+对于每条非 `noop` 候选：
+
+1. 先 search，确认现有 docs 是否已有相关结论：
+```bash
+py -3 -m lib.cli search "<关键词>"
+```
+2. 再 read 候选目标 doc 或对比 doc：
+```bash
+py -3 -m lib.cli read <bucket> <filename>
+```
+3. 再决定写入动作与归宿
+
+硬约束：
+- 非 `noop` 必须至少有 1 条 `search_queries`
+- 非 `noop` 必须至少有 1 条 `read_refs`
+- `append / merge / update` 必须把目标 doc 放进 `read_refs`
+- 不允许在未读目标 doc 的情况下直接覆盖长期知识
+
+### Step 4：显式判定动作
+
+每条候选知识必须判定为以下之一：
+
+- `noop`：没有新的长期知识
+- `create`：没有合适归宿，需要新建 doc
+- `append`：在现有 doc 中新增独立 section
+- `merge`：并入已有结论，由上层提供完整合并后的 doc
+- `update`：修改已过时结论，必须说明旧结论为何过时
+
+默认优先级：
+- 能 merge 就不 create
+- 能 append 就不 create
+- update 只用于明确替换旧结论
+
+### Step 5：生成 `save-request.json`
+
+把保存决策写入 `.memory/session/save-request.json`，形状如下：
+
+```json
+{
+  "version": "1",
+  "task": "<本次保存任务>",
+  "entries": [
+    {
+      "id": "append-checkout-rule",
+      "action": "append",
+      "reason": "stable checkout business rule",
+      "target": {"bucket": "pm", "file": "decisions.md"},
+      "payload": {"section_markdown": "## Checkout 优惠券规则\n\n- 先计算折扣再做上限校验\n"},
+      "evidence": {
+        "search_queries": ["Checkout 优惠券规则"],
+        "read_refs": ["docs/pm/decisions.md", "docs/architect/decisions.md"],
+        "source_refs": []
+      }
+    }
+  ]
+}
+```
+
+补充约束：
+- `create` 必须带 `index.topic` / `index.summary`
+- `append` 的 `section_markdown` 必须包含新的 heading
+- `update` 必须带 `payload.supersedes`
+- 若 `source_refs` 中引用了 working set excerpt，写入内容不能与 excerpt 原样相同，也不能整段嵌入
+
+### Step 6：调用 `save` core
+
+执行：
 
 ```bash
-ls .memory/inbox/*.md 2>/dev/null
+py -3 -m lib.cli save --file .memory/session/save-request.json
 ```
 
-读取每个 inbox 文件的内容。
+`save` core 会负责：
+- 校验 request 形状与 action 语义
+- 重放 evidence 校验
+- 执行 durable docs 写入
+- `create` 时注册 `topics.md`
+- 非 `noop` 后自动重建 `BRIEF.md` 与 `catalog-repair`
 
-#### 1b. 回顾当前会话
+### Step 7：读取结果并汇报
 
-回顾本次会话中产生的知识，应用**后悔测试**筛选：
+向用户报告：
+- `create / append / merge / update / noop` 分别有哪些
+- 新增/更新了哪些 durable docs
+- 哪些候选被判定为 `noop`
+- `BRIEF.md` 是否已重建
+- 若失败，给出 `save` core 返回的错误码与原因
 
-> 这次会话结束后，如果没记下来会后悔吗？
-> 新会话没有这条信息，会走弯路吗？
-
-**值得保存的**：
-- 做出了设计决策（选了方案 A 否了方案 B）
-- 发现或确认了约束（这个模块不能用 X）
-- 需求讨论达成了结论
-- 建立了代码约定（错误处理统一用这个模式）
-- 踩了坑（排障结论、绕过方案）
-
-**不值得保存的**：
-- 代码本身已经表达的事实
-- 临时调试过程
-- 还没形成结论的讨论
-- 通用知识（非项目特有）
-
-### Step 2：对每条知识执行合并
-
-对 Step 1 中筛选出的每条知识，按以下流程处理：
-
-#### 2a. 分类
-
-判断属于哪个 bucket：
-- **architect** — 架构决策、技术选型、设计模式
-- **dev** — 开发约定、编码规范、工具配置
-- **pm** — 产品决策、需求结论、版本规划
-- **qa** — 测试策略、质量约定、验收标准
-
-#### 2b. 去重检查
-
-```bash
-python3 -m lib.cli search "<知识的关键词>"
-```
-
-#### 2c. 写入
-
-根据去重结果：
-
-- **命中已有文档且内容近似** → 用 Edit 工具更新已有文件（追加或修改段落）
-- **未命中** → 用 Write 工具创建新文件到 `.memory/docs/<bucket>/<名称>.md`
-- **完全重复** → 跳过，记录到摘要中
-
-#### 2d. 注册到 topics
-
-对新创建的文件：
-
-```bash
-python3 -m lib.cli index <bucket> <filename> --topic <主题名> --summary <一句话描述>
-```
-
-### Step 3：清理 inbox
-
-删除已处理的 inbox 文件：
-
-```bash
-rm .memory/inbox/<已处理的文件>
-```
-
-保留 `.gitkeep`：
-```bash
-ls .memory/inbox/.gitkeep 2>/dev/null || touch .memory/inbox/.gitkeep
-```
-
-### Step 4：重建 BRIEF.md
-
-```bash
-python3 -m lib.cli brief
-```
-
-### Step 5：修复 catalog
-
-```bash
-python3 -m lib.cli catalog-repair
-```
-
-检查输出：
-- `ai_actions` → 自动处理（如死链修复）
-- `manual_actions` → 提示用户手动处理
-
-### Step 6：展示摘要
-
-向用户展示本次保存的结果：
-
-```
-## 保存结果
-
-### 新增
-- <bucket>/<filename> — <一句话描述>
-
-### 更新
-- <bucket>/<filename> — <更新了什么>
-
-### 跳过（重复）
-- <描述> — 与 <已有文件> 内容重复
-
-### 来源
-- inbox: X 条已处理
-- 会话提炼: Y 条
-
-### BRIEF.md
-- 已重建，共 Z 行
-```
+说明：
+- inbox 清理不是当前 `save` core 的职责；如需要清理，请单独确认并处理
 
 ---
 
-## Layer 2：工作过程中的自主写入
+## 边界
 
-在日常工作中（不是 /save 流程），如果你产生了新知识，可以主动写入 inbox 暂存。
-
-### 触发信号
-
-- 做出了设计决策（选了方案 A 否了方案 B）
-- 发现或确认了约束（这个模块不能用 X）
-- 需求讨论达成了结论
-- 建立了代码约定（错误处理统一用这个模式）
-- 踩了坑（排障结论、绕过方案）
-
-### 写入方式
-
-用 Write 工具写入：
-
-```
-.memory/inbox/{ISO时间戳}_{短语义名}.md
-```
-
-示例：`.memory/inbox/2026-03-18T14-30-00_design-decision.md`
-
-### 格式
-
-纯 markdown，不需要 frontmatter。内容应是提炼后的结论，不是原始对话。
-
-### 不写入的场景
-
-- 只读了代码，没产生新知识
-- 只执行了已有方案
-- 没产生新的"为什么"或"不要什么"
-
----
-
-## 安全边界
-
-1. **docs/ 是唯一正本** — 所有知识最终写入 docs/，不存在其他正本
-2. **BRIEF.md 是派生产物** — 只通过 `python3 -m lib.cli brief` 重建，不手动编辑
-3. **catalog/ 是派生索引** — 只通过 CLI 命令维护，不手动编辑
-4. **git 是安全网** — 所有变更可通过 git 回溯
+- working set 不能原样写回 docs
+- docs 是唯一正本
+- BRIEF / catalog 都是派生产物
+- `noop` 是合法成功结果，不强制“为了保存而保存”
+- 不直接手工改 `.memory/docs/` 来绕过 `save` core

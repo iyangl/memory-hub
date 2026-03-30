@@ -12,6 +12,18 @@ from pathlib import Path
 from lib import envelope, paths
 
 
+def read_doc(bucket: str, filename: str, project_root: Path | None = None) -> str:
+    err = paths.validate_bucket(bucket)
+    if err:
+        raise ValueError(f"Invalid bucket: {bucket}")
+
+    fp = paths.file_path(bucket, filename, project_root)
+    if not fp.exists():
+        raise FileNotFoundError(f"File not found: {bucket}/{filename}")
+
+    return fp.read_text(encoding="utf-8")
+
+
 def find_anchor(content: str, anchor: str) -> bool:
     """Check if a markdown heading matching the anchor exists."""
     # Anchor matches if any heading text, when slugified, equals the anchor
@@ -47,11 +59,10 @@ def run(args: list[str]) -> None:
     if err:
         envelope.fail("INVALID_BUCKET", f"Invalid bucket: {parsed.bucket}. Valid: {', '.join(paths.BUCKETS)}")
 
-    fp = paths.file_path(parsed.bucket, parsed.file, project_root)
-    if not fp.exists():
+    try:
+        content = read_doc(parsed.bucket, parsed.file, project_root)
+    except FileNotFoundError:
         envelope.fail("FILE_NOT_FOUND", f"File not found: {parsed.bucket}/{parsed.file}")
-
-    content = fp.read_text(encoding="utf-8")
 
     data: dict = {"bucket": parsed.bucket, "file": parsed.file, "content": content}
 

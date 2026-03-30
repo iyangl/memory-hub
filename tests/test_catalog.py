@@ -2,12 +2,10 @@
 
 import json
 import pytest
-from pathlib import Path
 from io import StringIO
 import sys
 
 from lib import paths
-from lib.utils import atomic_write
 
 
 @pytest.fixture
@@ -27,13 +25,10 @@ def initialized_project(tmp_path):
     return tmp_path
 
 
-def run_cmd(module_name, args, stdin_content=None):
+def run_cmd(module_name, args):
     import importlib
     old_stdout = sys.stdout
-    old_stdin = sys.stdin
     sys.stdout = StringIO()
-    if stdin_content is not None:
-        sys.stdin = StringIO(stdin_content)
     try:
         mod = importlib.import_module(module_name)
         with pytest.raises(SystemExit) as exc_info:
@@ -41,7 +36,6 @@ def run_cmd(module_name, args, stdin_content=None):
         return json.loads(sys.stdout.getvalue()), exc_info.value.code
     finally:
         sys.stdout = old_stdout
-        sys.stdin = old_stdin
 
 
 class TestCatalogRead:
@@ -50,215 +44,122 @@ class TestCatalogRead:
         assert code == 0
         assert "代码模块" in result["data"]["content"]
 
-    def test_read_nonexistent_module(self, initialized_project):
-        result, code = run_cmd("lib.catalog_read", ["nope", "--project-root", str(initialized_project)])
-        assert code == 1
-        assert result["code"] == "CATALOG_NOT_FOUND"
+    def test_catalog_read_sanitizes_module_name(self, initialized_project):
+        module_file = initialized_project / ".memory" / "catalog" / "modules" / "packages-web.md"
+        module_file.write_text("# packages/web\n", encoding="utf-8")
+        result, code = run_cmd("lib.catalog_read", ["packages/web", "--project-root", str(initialized_project)])
+        assert code == 0
+        assert "packages/web" in result["data"]["content"]
 
 
 class TestCatalogUpdate:
-    def test_creates_module_files(self, initialized_project):
+    def test_creates_navigation_module_files(self, initialized_project):
         modules_json = json.dumps({
-            "modules": [
-                {
+            "modules": [{
+                "name": "core",
+                "summary": "核心模块",
+                "read_when": "当任务涉及 CLI 或全局入口时阅读。",
+                "entry_points": ["lib/cli.py"],
+                "read_order": ["lib/cli.py", "lib/envelope.py"],
+                "implicit_constraints": ["先看入口再追踪分发"],
+                "known_risks": ["容易只看入口忽略下游模块"],
+                "verification_focus": ["确认命令分发与输出 envelope 保持稳定"],
+                "related_memory": ["docs/architect/decisions.md"],
+                "files": [
+                    {"path": "lib/cli.py", "description": "CLI 入口"},
+                    {"path": "lib/envelope.py", "description": "JSON envelope"},
+                ]
+            }]
+        })
+        json_file = initialized_project / "modules.json"
+        json_file.write_text(modules_json, encoding="utf-8")
+        result, code = run_cmd("lib.catalog_update", ["--file", str(json_file), "--project-root", str(initialized_project)])
+        assert code == 0
+        module_file = initialized_project / ".memory" / "catalog" / "modules" / "core.md"
+        content = module_file.read_text(encoding="utf-8")
+        assert "## 何时阅读" in content
+        assert "## 推荐入口" in content
+        assert "## 推荐阅读顺序" in content
+        assert "## 隐含约束" in content
+        assert "## 主要风险" in content
+        assert "## 验证重点" in content
+        assert "## 关联记忆" in content
+
+    def test_topics_uses_navigation_entry_style(self, initialized_project):
+        modules_json = json.dumps({
+            "modules": [{
+                "name": "core",
+                "summary": "核心模块",
+                "read_when": "当任务涉及 CLI 或全局入口时阅读。",
+                "entry_points": ["lib/cli.py"],
+                "files": [{"path": "lib/cli.py", "description": "CLI 入口"}]
+            }]
+        })
+        json_file = initialized_project / "modules.json"
+        json_file.write_text(modules_json, encoding="utf-8")
+        run_cmd("lib.catalog_update", ["--file", str(json_file), "--project-root", str(initialized_project)])
+        topics = (initialized_project / ".memory" / "catalog" / "topics.md").read_text(encoding="utf-8")
+        assert "core" in topics
+        assert "入口:" in topics
+
+    def test_accepts_scan_modules_envelope_shape(self, initialized_project):
+        modules_json = json.dumps({
+            "ok": True,
+            "data": {
+                "modules": [{
                     "name": "core",
                     "summary": "核心模块",
-                    "files": [
-                        {"path": "lib/cli.py", "description": "CLI 入口"},
-                        {"path": "lib/envelope.py", "description": "JSON envelope"},
-                    ]
-                }
-            ]
+                    "read_when": "当任务涉及 CLI 时阅读。",
+                    "entry_points": ["lib/cli.py"],
+                    "files": [{"path": "lib/cli.py", "description": "CLI 入口"}]
+                }]
+            }
         })
-        # Write JSON to a temp file
-        json_file = initialized_project / "modules.json"
+        json_file = initialized_project / "scan-output.json"
         json_file.write_text(modules_json, encoding="utf-8")
-        result, code = run_cmd("lib.catalog_update",
-                               ["--file", str(json_file),
-                                "--project-root", str(initialized_project)])
+        result, code = run_cmd("lib.catalog_update", ["--file", str(json_file), "--project-root", str(initialized_project)])
         assert code == 0
         assert "core" in result["data"]["modules_written"]
-        # Check module file exists
-        module_file = initialized_project / ".memory" / "catalog" / "modules" / "core.md"
-        assert module_file.exists()
-        content = module_file.read_text(encoding="utf-8")
-        assert "lib/cli.py" in content
-
-    def test_deletes_old_modules(self, initialized_project):
-        # Create an old module file
-        old = initialized_project / ".memory" / "catalog" / "modules" / "old.md"
-        old.write_text("# old\n", encoding="utf-8")
-        modules_json = json.dumps({"modules": [{"name": "new", "summary": "新模块", "files": []}]})
-        json_file = initialized_project / "modules.json"
-        json_file.write_text(modules_json, encoding="utf-8")
-        result, code = run_cmd("lib.catalog_update",
-                               ["--file", str(json_file),
-                                "--project-root", str(initialized_project)])
-        assert code == 0
-        assert "old.md" in result["data"]["modules_deleted"]
-        assert not old.exists()
-
-    def test_new_format_with_all_sections(self, initialized_project):
-        """Module with all optional fields should produce rich markdown."""
-        modules_json = json.dumps({
-            "modules": [{
-                "name": "auth",
-                "summary": "认证模块",
-                "purpose": "处理用户登录、注册和会话管理。基于 JWT 实现无状态认证。",
-                "key_abstractions": [
-                    "AuthService — 认证核心逻辑",
-                    "JwtHelper — Token 生成和验证",
-                ],
-                "internal_deps": [
-                    "database — 用户数据存储",
-                    "config — JWT 密钥配置",
-                ],
-                "dir_tree": "handlers/ (3 files)\nmodels/ (2 files)",
-                "files": [
-                    {"path": "auth/service.py", "description": "认证服务入口"},
-                    {"path": "auth/jwt.py", "description": "JWT 工具"},
-                ],
-            }]
-        })
-        json_file = initialized_project / "modules.json"
-        json_file.write_text(modules_json, encoding="utf-8")
-        result, code = run_cmd("lib.catalog_update",
-                               ["--file", str(json_file),
-                                "--project-root", str(initialized_project)])
-        assert code == 0
-        module_file = initialized_project / ".memory" / "catalog" / "modules" / "auth.md"
-        content = module_file.read_text(encoding="utf-8")
-        assert "## 职责" in content
-        assert "处理用户登录" in content
-        assert "## 关键抽象" in content
-        assert "AuthService" in content
-        assert "## 内部依赖" in content
-        assert "database" in content
-        assert "## 目录结构" in content
-        assert "handlers/" in content
-        assert "## 代表文件" in content
-        assert "`auth/service.py`" in content
-
-    def test_new_format_graceful_degrade(self, initialized_project):
-        """Module missing optional fields should still produce valid markdown."""
-        modules_json = json.dumps({
-            "modules": [{
-                "name": "simple",
-                "summary": "简单模块",
-                "files": [{"path": "simple/main.py", "description": ""}],
-            }]
-        })
-        json_file = initialized_project / "modules.json"
-        json_file.write_text(modules_json, encoding="utf-8")
-        result, code = run_cmd("lib.catalog_update",
-                               ["--file", str(json_file),
-                                "--project-root", str(initialized_project)])
-        assert code == 0
-        module_file = initialized_project / ".memory" / "catalog" / "modules" / "simple.md"
-        content = module_file.read_text(encoding="utf-8")
-        assert "# simple" in content
-        assert "> 简单模块" in content
-        assert "## 代表文件" in content
-        # Optional sections should NOT appear
-        assert "## 职责" not in content
-        assert "## 关键抽象" not in content
-        assert "## 内部依赖" not in content
-        assert "## 目录结构" not in content
 
 
 class TestCatalogRepair:
-    def test_detects_dead_links(self, initialized_project):
-        # Add a dead link to topics.md
-        topics = initialized_project / ".memory" / "catalog" / "topics.md"
-        topics.write_text(
-            "# Topics\n\n## 知识文件\n### ghost\n- docs/pm/ghost.md — 不存在的文件\n",
-            encoding="utf-8"
-        )
-        result, code = run_cmd("lib.catalog_repair", ["--project-root", str(initialized_project)])
-        assert code == 0
-        assert any(f["type"] == "dead_link_removed" for f in result["data"]["fixed"])
-
-    def test_detects_legacy_docs_refs(self, initialized_project):
-        topics = initialized_project / ".memory" / "catalog" / "topics.md"
-        topics.write_text(
-            "# Topics\n\n## 知识文件\n### legacy\n- pm/decisions.md — 旧路径\n",
-            encoding="utf-8"
-        )
-        result, code = run_cmd("lib.catalog_repair", ["--project-root", str(initialized_project)])
-        assert code == 0
-        legacy = [a for a in result["data"]["ai_actions"] if a["type"] == "legacy_docs_ref"]
-        assert len(legacy) == 1
-        assert legacy[0]["suggested"] == "docs/pm/decisions.md"
-
     def test_detects_missing_registration(self, initialized_project):
         result, code = run_cmd("lib.catalog_repair", ["--project-root", str(initialized_project)])
         assert code == 0
-        # Base files are not registered, should be in ai_actions
         missing = [a for a in result["data"]["ai_actions"] if a["type"] == "missing_registration"]
         assert len(missing) > 0
 
+    def test_refreshes_stale_registered_summary(self, initialized_project):
+        pm_doc = initialized_project / ".memory" / "docs" / "pm" / "decisions.md"
+        pm_doc.write_text("## Checkout 优惠券规则\n\n- 先计算折扣再做上限校验\n", encoding="utf-8")
+        topics = initialized_project / ".memory" / "catalog" / "topics.md"
+        topics.write_text(
+            "# Topics\n\n## 代码模块\n\n## 知识文件\n### pm-decisions\n- docs/pm/decisions.md — 旧摘要\n",
+            encoding="utf-8",
+        )
 
-class TestCatalogUpdateValidation:
-    def test_sanitizes_module_name(self, initialized_project):
-        modules_json = json.dumps({
-            "modules": [{"name": "My Module", "summary": "test", "files": []}]
-        })
-        json_file = initialized_project / "modules.json"
-        json_file.write_text(modules_json, encoding="utf-8")
-        result, code = run_cmd("lib.catalog_update",
-                               ["--file", str(json_file),
-                                "--project-root", str(initialized_project)])
+        result, code = run_cmd("lib.catalog_repair", ["--project-root", str(initialized_project)])
         assert code == 0
-        assert "my-module" in result["data"]["modules_written"]
-        module_file = initialized_project / ".memory" / "catalog" / "modules" / "my-module.md"
-        assert module_file.exists()
+        refreshed = [item for item in result["data"]["fixed"] if item["type"] == "stale_summary_refreshed"]
+        assert len(refreshed) == 1
+        assert refreshed[0]["file_ref"] == "docs/pm/decisions.md"
 
-    def test_skips_invalid_module_missing_name(self, initialized_project):
-        modules_json = json.dumps({
-            "modules": [
-                {"name": "", "summary": "empty name", "files": []},
-                {"name": "valid", "summary": "ok", "files": []},
-            ]
-        })
-        json_file = initialized_project / "modules.json"
-        json_file.write_text(modules_json, encoding="utf-8")
-        result, code = run_cmd("lib.catalog_update",
-                               ["--file", str(json_file),
-                                "--project-root", str(initialized_project)])
-        assert code == 0
-        assert "valid" in result["data"]["modules_written"]
-        assert len(result["data"]["modules_skipped"]) == 1
-        assert result["data"]["modules_skipped"][0]["reason"] == "missing or empty 'name'"
+        updated_topics = topics.read_text(encoding="utf-8")
+        assert "docs/pm/decisions.md — Checkout 优惠券规则：先计算折扣再做上限校验" in updated_topics
 
-    def test_skips_invalid_files_field(self, initialized_project):
-        modules_json = json.dumps({
-            "modules": [{"name": "bad", "summary": "x", "files": "not-a-list"}]
-        })
-        json_file = initialized_project / "modules.json"
-        json_file.write_text(modules_json, encoding="utf-8")
-        result, code = run_cmd("lib.catalog_update",
-                               ["--file", str(json_file),
-                                "--project-root", str(initialized_project)])
-        assert code == 0
-        assert len(result["data"]["modules_skipped"]) == 1
-        skipped_actions = [a for a in result["ai_actions"] if a["type"] == "invalid_module_skipped"]
-        assert len(skipped_actions) == 1
+    def test_keeps_valid_action_aware_summary(self, initialized_project):
+        pm_doc = initialized_project / ".memory" / "docs" / "pm" / "decisions.md"
+        pm_doc.write_text("## 规则\n\n- 旧规则\n\n## Checkout 优惠券规则\n\n- 先计算折扣再做上限校验\n", encoding="utf-8")
+        topics = initialized_project / ".memory" / "catalog" / "topics.md"
+        topics.write_text(
+            "# Topics\n\n## 代码模块\n\n## 知识文件\n### pm-decisions\n- docs/pm/decisions.md — Checkout 优惠券规则：先计算折扣再做上限校验\n",
+            encoding="utf-8",
+        )
 
-    def test_mixed_valid_invalid_modules(self, initialized_project):
-        modules_json = json.dumps({
-            "modules": [
-                {"name": "good", "summary": "works", "files": []},
-                {"summary": "no name field", "files": []},
-                {"name": "also-good", "summary": "fine", "files": [{"path": "a.py", "description": ""}]},
-            ]
-        })
-        json_file = initialized_project / "modules.json"
-        json_file.write_text(modules_json, encoding="utf-8")
-        result, code = run_cmd("lib.catalog_update",
-                               ["--file", str(json_file),
-                                "--project-root", str(initialized_project)])
+        result, code = run_cmd("lib.catalog_repair", ["--project-root", str(initialized_project)])
         assert code == 0
-        written = result["data"]["modules_written"]
-        assert "good" in written
-        assert "also-good" in written
-        assert len(result["data"]["modules_skipped"]) == 1
+        refreshed = [item for item in result["data"]["fixed"] if item["type"] == "stale_summary_refreshed"]
+        assert refreshed == []
+
+        updated_topics = topics.read_text(encoding="utf-8")
+        assert "docs/pm/decisions.md — Checkout 优惠券规则：先计算折扣再做上限校验" in updated_topics

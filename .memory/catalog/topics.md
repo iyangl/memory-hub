@@ -1,21 +1,21 @@
 # Memory Hub — Topics Index
 
 ## 代码模块
-- core — 基础设施与仓库级行为接线：CLI 分发、JSON envelope、路径管理、规则入口、MCP/自测启动
-- memory — 知识管理命令：init/read/list/search/index
-- catalog — 索引管理命令：read/update/repair
-- durable-memory — v2 主线 + decision discovery Phase 1：统一 read/search/capture/update/show review、本地 hybrid recall、boot/search projections、session-extract 与 discover 候选发现
-- tests — 单元测试：核心模块与 durable memory Phase 1A~Phase 2F 契约测试
+- root；当任务涉及项目入口、全局配置或无法确定模块归属时阅读；先看 `pyproject.toml`。；入口: `pyproject.toml`
+- lib；当任务涉及 lib 的职责、边界或入口时阅读；优先从 `lib/__init__.py`、`lib/brief.py` 开始。；入口: `lib/__init__.py`, `lib/brief.py`
+- tests；当任务涉及验证策略、回归范围或测试入口时阅读；先看 `tests/__init__.py`、`tests/test_brief.py`。；入口: `tests/__init__.py`, `tests/test_brief.py`
 ## 知识文件
 ### tech-stack
-- docs/architect/tech-stack.md — 技术栈、关键依赖、使用方式与限制
+- docs/architect/tech-stack.md — 关键设计约束：无服务进程、无远程协议层、无外部数据库，所有状态都落在项目目录。
 ### conventions
-- docs/dev/conventions.md — 目录命名规则、模块组织方式、代码约定
+- docs/dev/conventions.md — 命名约定：文件名：`snake_case`（如 `memory_read.py`、`catalog_repair.py`）
 ### pm-decisions
-- docs/pm/decisions.md — MVP 收口结论、默认使用路径与 post-MVP backlog
+- docs/pm/decisions.md — Recall-first 产品结论：recall 的目标是先定位再读取，而不是把所有 docs 一次性读完。
 ### architect-decisions
-- docs/architect/decisions.md — 设计决策日志（write→index 重构）
+- docs/architect/decisions.md — Recall-first 架构决策：`.memory/docs/` 是唯一正本；`BRIEF.md`、`catalog/`、`session/` 都是派生产物。
 ### qa-strategy
-- docs/qa/strategy.md — 测试策略与质量约束
+- docs/qa/strategy.md — # 测试策略与质量约束
 ### memory-相关逻辑变更必须补自动化测试和自测记录
-- docs/qa/memory-相关逻辑变更必须补自动化测试和自测记录.md — 补充项目开发约束，确保后续所有 memory 相关改动都有自动化验证与人工自测痕迹。
+- docs/qa/memory-相关逻辑变更必须补自动化测试和自测记录.md — # Memory 相关逻辑变更必须补自动化测试和自测记录
+### caching
+- docs/architect/caching.md — 决策：使用本地文件缓存

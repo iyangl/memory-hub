@@ -17,6 +17,8 @@ from difflib import get_close_matches
 from pathlib import Path
 
 from lib import envelope, paths
+from lib.memory_index import summarize_doc, summary_candidates_doc
+from lib.utils import atomic_write
 
 
 def _parse_topics_entries(content: str) -> list[dict]:
@@ -62,6 +64,50 @@ def _slugify(text: str) -> str:
     text = re.sub(r"[^\w\s\u4e00-\u9fff-]", "", text)
     text = re.sub(r"[\s]+", "-", text)
     return text
+
+
+def _refresh_stale_summaries(
+    entries: list[dict],
+    lines: list[str],
+    *,
+    project_root: Path | None,
+    lines_to_remove: set[int],
+) -> list[dict]:
+    fixed: list[dict] = []
+    changed = False
+
+    for entry in entries:
+        if entry["line_number"] in lines_to_remove:
+            continue
+
+        parsed = paths.parse_docs_file_ref(entry["file_ref"])
+        if parsed is None:
+            continue
+
+        bucket, filename = parsed
+        target = paths.file_path(bucket, filename, project_root)
+        if not target.exists():
+            continue
+
+        expected_summary = summarize_doc(bucket, filename, project_root)
+        valid_summaries = {summary for summary in summary_candidates_doc(bucket, filename, project_root)}
+        if entry["description"] == expected_summary or entry["description"] in valid_summaries:
+            continue
+
+        anchor_suffix = f" #{entry['anchor']}" if entry.get("anchor") else ""
+        lines[entry["line_number"]] = f"- {entry['file_ref']}{anchor_suffix} — {expected_summary}"
+        fixed.append({
+            "type": "stale_summary_refreshed",
+            "file_ref": entry["file_ref"],
+            "old_summary": entry["description"],
+            "new_summary": expected_summary,
+            "line": entry["line_number"] + 1,
+        })
+        changed = True
+
+    if changed:
+        atomic_write(paths.topics_path(project_root), "\n".join(lines) + "\n")
+    return fixed
 
 
 def repair(project_root: Path | None = None) -> dict:
@@ -212,8 +258,13 @@ def repair(project_root: Path | None = None) -> dict:
                     continue  # Skip empty topic header
             cleaned.append(line)
 
-        from lib.utils import atomic_write
+        lines = cleaned
         atomic_write(topics_file, "\n".join(cleaned) + "\n")
+        content = "\n".join(cleaned) + "\n"
+        entries = _parse_topics_entries(content)
+        lines_to_remove = set()
+
+    fixed.extend(_refresh_stale_summaries(entries, lines, project_root=project_root, lines_to_remove=lines_to_remove))
 
     return {"fixed": fixed, "ai_actions": ai_actions, "manual_actions": manual_actions}
 

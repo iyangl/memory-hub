@@ -7,6 +7,7 @@ from io import StringIO
 import sys
 
 from lib import paths
+from lib.memory_index import summary_candidates_doc, summarize_doc, summarize_markdown
 
 
 @pytest.fixture
@@ -34,6 +35,20 @@ def run_index(args):
         return json.loads(sys.stdout.getvalue()), exc_info.value.code
     finally:
         sys.stdout = old_stdout
+
+
+class TestSummarizeMarkdown:
+    def test_uses_heading_and_first_bullet(self):
+        summary = summarize_markdown("pm", "## Checkout 优惠券规则\n\n- 先计算折扣再做上限校验\n")
+        assert summary == "Checkout 优惠券规则：先计算折扣再做上限校验"
+
+    def test_summary_candidates_include_title_prefixed_variant(self, initialized_project):
+        fp = initialized_project / ".memory" / "docs" / "architect" / "caching.md"
+        fp.write_text("# 缓存策略\n\n## 决策\n\n- 使用本地文件缓存\n", encoding="utf-8")
+
+        candidates = summary_candidates_doc("architect", "caching.md", initialized_project)
+        assert "决策：使用本地文件缓存" in candidates
+        assert "缓存策略：决策：使用本地文件缓存" in candidates
 
 
 class TestIndex:

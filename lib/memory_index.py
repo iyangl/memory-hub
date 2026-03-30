@@ -10,12 +10,163 @@ This command only updates the topics.md knowledge index.
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 
 from lib import envelope, paths
+from lib.brief import _extract_best_section
 from lib.utils import atomic_write
 
 TOPICS_KNOWLEDGE_HEADER = "## 知识文件"
+
+
+def _normalize_summary_line(line: str) -> str:
+    return re.sub(r"\s+", " ", line).strip().lstrip("- ").strip()
+
+
+def _normalize_summary_text(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _extract_h1_title(content: str) -> str:
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("# "):
+            return _normalize_summary_line(stripped[2:])
+    return ""
+
+
+def _extract_h2_sections(content: str) -> list[str]:
+    sections: list[str] = []
+    current: list[str] = []
+    for line in content.splitlines():
+        if line.startswith("## "):
+            if current:
+                sections.append("\n".join(current).rstrip())
+            current = [line.rstrip()]
+            continue
+        if current:
+            current.append(line.rstrip())
+    if current:
+        sections.append("\n".join(current).rstrip())
+    return sections
+
+
+def summarize_markdown(bucket: str, content: str, fallback: str = "") -> str:
+    best = _extract_best_section(content, bucket, max_lines=2).strip()
+    lines = [_normalize_summary_line(line) for line in best.splitlines() if line.strip()]
+    if not lines:
+        return fallback or ""
+
+    heading = ""
+    body: list[str] = []
+    if lines[0].startswith("## "):
+        heading = lines[0][3:].strip()
+        body = lines[1:]
+    else:
+        body = lines[:]
+
+    if heading and body:
+        lead = body[0]
+        return f"{heading}：{lead}"
+    if heading:
+        return heading
+    return body[0]
+
+
+def summary_candidates_markdown(bucket: str, content: str, fallback: str = "") -> list[str]:
+    candidates: list[str] = []
+    seen: set[str] = set()
+
+    def add(value: str) -> None:
+        normalized = _normalize_summary_text(value)
+        if not normalized or normalized in seen:
+            return
+        seen.add(normalized)
+        candidates.append(normalized)
+
+    add(summarize_markdown(bucket, content, fallback))
+
+    title = _extract_h1_title(content)
+    if title:
+        add(title)
+
+    for section in _extract_h2_sections(content):
+        section_summary = summarize_markdown(bucket, section, fallback)
+        add(section_summary)
+        if title and section_summary:
+            normalized_title = _normalize_summary_text(title)
+            normalized_section = _normalize_summary_text(section_summary)
+            if normalized_section != normalized_title and not normalized_section.startswith(f"{normalized_title}："):
+                add(f"{title}：{section_summary}")
+
+    return candidates
+
+
+def summarize_doc(bucket: str, filename: str, project_root: Path | None = None) -> str:
+    content = paths.file_path(bucket, filename, project_root).read_text(encoding="utf-8")
+    return summarize_markdown(bucket, content, fallback=filename) or filename
+
+
+def summary_candidates_doc(bucket: str, filename: str, project_root: Path | None = None) -> list[str]:
+    content = paths.file_path(bucket, filename, project_root).read_text(encoding="utf-8")
+    return summary_candidates_markdown(bucket, content, fallback=filename)
+
+
+def refresh_doc_summary(bucket: str, filename: str, project_root: Path | None = None, summary: str | None = None) -> bool:
+    topics_file = paths.topics_path(project_root)
+    if not topics_file.exists():
+        return False
+
+    file_ref = paths.docs_file_ref(bucket, filename)
+    content = topics_file.read_text(encoding="utf-8")
+    entries = content.splitlines()
+    prefix = f"- {file_ref}"
+    topic: str | None = None
+    anchor: str | None = None
+
+    for line in entries:
+        stripped = line.strip()
+        if stripped.startswith("### "):
+            topic = stripped[4:].strip()
+            continue
+        if not stripped.startswith(prefix):
+            continue
+        match = re.match(r"^-\s+\S+?(?:\s+#(\S+))?\s+—\s+.+$", stripped)
+        if match:
+            anchor = match.group(1)
+        break
+    else:
+        return False
+
+    if not topic:
+        return False
+
+    register_doc(
+        bucket,
+        filename,
+        topic,
+        summary or summarize_doc(bucket, filename, project_root),
+        anchor,
+        project_root,
+    )
+    return True
+
+
+def register_doc(bucket: str, filename: str, topic: str, summary: str,
+                 anchor: str | None = None, project_root: Path | None = None) -> None:
+    err = paths.validate_bucket(bucket)
+    if err:
+        raise ValueError(f"Invalid bucket: {bucket}")
+
+    fp = paths.file_path(bucket, filename, project_root)
+    if not fp.exists():
+        raise FileNotFoundError(
+            f"Target file does not exist: docs/{bucket}/{filename}. Write the file first, then call index."
+        )
+
+    topics_file = paths.topics_path(project_root)
+    _update_topics_knowledge(topics_file, topic, summary, bucket, filename, anchor)
 
 
 def _update_topics_knowledge(topics_file: Path, topic: str, summary: str,
@@ -94,18 +245,13 @@ def run(args: list[str]) -> None:
     if err:
         envelope.fail("INVALID_BUCKET", f"Invalid bucket: {parsed.bucket}. Valid: {', '.join(paths.BUCKETS)}")
 
-    # Verify target file exists
-    fp = paths.file_path(parsed.bucket, parsed.file, project_root)
-    if not fp.exists():
+    try:
+        register_doc(parsed.bucket, parsed.file, parsed.topic, parsed.summary, parsed.anchor, project_root)
+    except FileNotFoundError:
         envelope.fail(
             "FILE_NOT_FOUND",
             f"Target file does not exist: docs/{parsed.bucket}/{parsed.file}. Write the file first, then call index.",
         )
-
-    # Update topics.md knowledge index
-    topics_file = paths.topics_path(project_root)
-    _update_topics_knowledge(topics_file, parsed.topic, parsed.summary,
-                             parsed.bucket, parsed.file, parsed.anchor)
 
     envelope.ok({
         "bucket": parsed.bucket,
