@@ -242,6 +242,10 @@ python3 -m lib.cli working-set --plan-file <recall-plan.json> [--project-root <p
 - working set 不能原样落盘
 - 默认优先 `merge`，其次 `append`，最后 `create`
 - `update` 必须明确旧结论为什么过时
+- `update` 的 supersedes 追溯信息应落在 `.memory/session/save-trace/<artifact>.json` 等会话产物，而不是污染 durable docs 正文
+- 该 trace 属于 best-effort session artifact：持久化失败不会改变 durable docs 已成功写入这一事实
+- 旧的 `.memory/session/save-trace.jsonl` 属于 legacy session artifact；新实现不读取、不迁移回放
+- 本设计只解决 trace artifact 的并发覆盖问题，不承诺 `save` 对 durable docs / rebuild 产物的全流程并发安全
 
 ---
 

@@ -95,9 +95,10 @@ memory-hub <command> [args]
 - 模块卡关注“何时阅读、入口、阅读顺序、约束、风险、验证重点”
 - 由 `scan-modules --out ...` / `catalog-update --file <scan-json>` / `catalog-repair` 维护
 
-### `session/*.json`
+### `session/*`
 
-- 保存当前任务的 recall plan、working set、save request
+- 保存当前任务的 recall plan、working set、save request、save trace 等会话产物（例如 `*.json`）
+- `save-trace` 推荐落在 `.memory/session/save-trace/`，采用每次 save 一个独立 artifact 的模型
 - 只服务当前会话或当前任务
 - 不应原样写回长期 docs
 
@@ -126,6 +127,10 @@ memory-hub save --file <path>
 - `create` 必须带 `index.topic / index.summary`
 - `append` 只允许新增 heading；重复 heading 会失败
 - `update` 必须说明 `payload.supersedes`
+- `update` 的 supersedes 追溯信息会尽力写入 `.memory/session/save-trace/<artifact>.json`，用于记录被替换目标、替换原因与前后摘要；trace 写入失败不会回滚 durable docs
+- `save` 返回值中的 `data.trace` 形状为 `{ update_supersedes, trace_file, warning }`；`trace_file` 使用仓库内相对路径，并指向当前这次 save 生成的单个 trace artifact
+- 旧的 `.memory/session/save-trace.jsonl` 视为 legacy session artifact：新实现不再读取它，可安全忽略或删除
+- 本设计只解决 trace artifact 的并发覆盖问题，不承诺解决整个 `save` 流程的并发安全
 - working set 不能原样写回 docs
 - 只要发生非 `noop` durable 写入，就会自动重建 `BRIEF.md` 并执行 `catalog-repair`
 

@@ -12,7 +12,7 @@
 ### pm-decisions
 - docs/pm/decisions.md — Recall-first 产品结论：recall 的目标是先定位再读取，而不是把所有 docs 一次性读完。
 ### architect-decisions
-- docs/architect/decisions.md — Recall-first 架构决策：`.memory/docs/` 是唯一正本；`BRIEF.md`、`catalog/`、`session/` 都是派生产物。
+- docs/architect/decisions.md — Update supersedes traceability：`update` 的 supersedes 追溯信息属于 session artifact，应写入 `.memory/session/save-trace/<artifact>.json`，而不是 durable docs 正文。
 ### qa-strategy
 - docs/qa/strategy.md — # 测试策略与质量约束
 ### memory-相关逻辑变更必须补自动化测试和自测记录

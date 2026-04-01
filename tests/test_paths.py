@@ -77,6 +77,14 @@ class TestPaths:
         fp = paths.session_file_path("foo", ".json", Path("/project"))
         assert fp == Path("/project/.memory/session/foo.json")
 
+    def test_save_trace_root(self):
+        trace_root = paths.save_trace_root(Path("/project"))
+        assert trace_root == Path("/project/.memory/session/save-trace")
+
+    def test_save_trace_file_path(self):
+        trace_file = paths.save_trace_file_path("trace.json", Path("/project"))
+        assert trace_file == Path("/project/.memory/session/save-trace/trace.json")
+
     def test_brief_path(self):
         brief = paths.brief_path(Path("/project"))
         assert brief == Path("/project/.memory/BRIEF.md")

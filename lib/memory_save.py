@@ -8,8 +8,10 @@ from __future__ import annotations
 import argparse
 import json
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from lib import envelope, paths
 from lib.brief import generate_brief
@@ -17,7 +19,7 @@ from lib.catalog_repair import repair
 from lib.memory_index import refresh_doc_summary, register_doc, summarize_markdown
 from lib.memory_read import find_anchor, read_doc
 from lib.memory_search import search_docs
-from lib.utils import atomic_write
+from lib.utils import atomic_write, sanitize_module_name
 
 ALLOWED_ACTIONS = frozenset({"noop", "create", "append", "merge", "update"})
 NON_NOOP_ACTIONS = ALLOWED_ACTIONS - {"noop"}
@@ -48,13 +50,36 @@ def _require_non_empty_string(value: Any, *, field: str, entry_id: str | None = 
     return value.strip()
 
 
-def _looks_like_working_set_source(source: dict[str, Any]) -> bool:
+def _normalize_source_path(path: str) -> str:
+    return path.strip().replace("\\", "/")
+
+
+def _repo_session_json_ref(path: str) -> str | None:
+    normalized_path = _normalize_source_path(path)
+    if not normalized_path:
+        return None
+
+    marker = "/.memory/session/"
+    if normalized_path.startswith(".memory/session/"):
+        session_ref = normalized_path
+    elif marker in normalized_path:
+        session_ref = ".memory/session/" + normalized_path.split(marker, 1)[1]
+    else:
+        return None
+
+    return session_ref if session_ref.endswith(".json") else None
+
+
+def _looks_like_working_set_source(source: dict[str, Any], project_root: Path | None = None) -> bool:
     source_type = str(source.get("type", "")).strip().lower()
     if source_type in WORKING_SET_SOURCE_TYPES:
         return True
 
-    path = str(source.get("path", "")).replace("\\", "/")
-    return "/.memory/session/" in path or path.startswith(".memory/session/")
+    path = _normalize_source_path(str(source.get("path", "")))
+    if not path:
+        return False
+
+    return _repo_session_json_ref(path) is not None
 
 
 def _normalize_source_refs(source_refs: Any, *, entry_id: str) -> list[dict[str, Any]]:
@@ -88,13 +113,43 @@ def _looks_like_working_set_payload(payload: Any) -> bool:
     )
 
 
+def _effective_project_root(project_root: Path | None) -> Path:
+    return (project_root or Path.cwd()).resolve()
+
+
+def _resolve_runtime_path(path: Path) -> Path:
+    if path.is_absolute():
+        return path.resolve()
+    return (Path.cwd() / path).resolve()
+
+
 def _session_ref_path(path: Path, project_root: Path | None) -> str:
-    if project_root is not None:
-        try:
-            return path.relative_to(project_root).as_posix()
-        except ValueError:
-            pass
-    return path.as_posix()
+    resolved_path = _resolve_runtime_path(path)
+    try:
+        return resolved_path.relative_to(_effective_project_root(project_root)).as_posix()
+    except ValueError:
+        return resolved_path.as_posix()
+
+
+def _request_ref(path: Path | None, project_root: Path | None) -> str | None:
+    if path is None:
+        return None
+
+    resolved_path = path.resolve() if path.is_absolute() else (_effective_project_root(project_root) / path).resolve()
+    try:
+        return resolved_path.relative_to(_effective_project_root(project_root)).as_posix()
+    except ValueError:
+        pass
+
+    name = resolved_path.name.strip()
+    return name or None
+
+
+def _save_trace_filename(request_file: Path | None) -> str:
+    request_stem = request_file.stem if request_file is not None else "save-request"
+    normalized_stem = sanitize_module_name(request_stem)[:40] or "save-request"
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    return f"{timestamp}_{uuid4().hex}_{normalized_stem}.json"
 
 
 def _collect_working_set_excerpts(payload: dict[str, Any]) -> list[str]:
@@ -163,10 +218,11 @@ def _ensure_not_verbatim_working_set(
     *,
     entry_id: str,
     session_working_set_sources: list[dict[str, Any]],
+    project_root: Path | None,
 ) -> None:
     normalized_payload = _normalize_text(payload_text)
     candidate_sources = [
-        *[source for source in source_refs if _looks_like_working_set_source(source)],
+        *[source for source in source_refs if _looks_like_working_set_source(source, project_root)],
         *session_working_set_sources,
     ]
 
@@ -192,7 +248,7 @@ def _ensure_not_verbatim_working_set(
                 details={"entry_id": entry_id, "source": source.get("path") or source.get("type")},
             )
 
-        is_session_source = _looks_like_working_set_source(source)
+        is_session_source = _looks_like_working_set_source(source, project_root)
         if (
             ("\n" in excerpt or len(normalized_excerpt) >= 60 or (is_session_source and len(normalized_excerpt) >= 20))
             and normalized_excerpt in normalized_payload
@@ -497,6 +553,7 @@ def _validate_entry(
             evidence["source_refs"],
             entry_id=entry_id,
             session_working_set_sources=session_working_set_sources,
+            project_root=project_root,
         )
 
     normalized.update({
@@ -521,6 +578,51 @@ def _entry_summary_override(entry: dict[str, Any]) -> str | None:
         return summarize_markdown(entry["bucket"], entry["payload"]["text"], fallback=entry["filename"])
     content = _ensure_doc_text(entry["payload"]["text"])
     return summarize_markdown(entry["bucket"], content, fallback=entry["filename"])
+
+
+def _build_update_trace(entry: dict[str, Any]) -> dict[str, Any] | None:
+    if entry["action"] != "update":
+        return None
+
+    current_content = entry.get("current_content", "")
+    previous_summary = summarize_markdown(entry["bucket"], current_content, fallback=entry["filename"])
+    new_content = _ensure_doc_text(entry["payload"]["text"])
+    new_summary = summarize_markdown(entry["bucket"], new_content, fallback=entry["filename"])
+    return {
+        "target": entry["target_ref"],
+        "supersedes": entry["payload"]["supersedes"],
+        "previous_summary": previous_summary,
+        "new_summary": new_summary,
+    }
+
+
+def _update_traces(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [trace for trace in (_build_update_trace(entry) for entry in entries) if trace is not None]
+
+
+def _write_save_trace_artifact(
+    traces: list[dict[str, Any]],
+    *,
+    task: str | None,
+    request_file: Path | None,
+    project_root: Path | None,
+) -> str | None:
+    if not traces:
+        return None
+
+    filename = _save_trace_filename(request_file)
+    trace_path = paths.save_trace_file_path(filename, project_root=project_root)
+    relative_trace_path = _session_ref_path(trace_path, project_root)
+    payload = {
+        "version": "1",
+        "kind": "save_trace",
+        "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "task": task,
+        "request_ref": _request_ref(request_file, project_root),
+        "update_supersedes": traces,
+    }
+    atomic_write(trace_path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+    return relative_trace_path
 
 
 def _restore_entry_summary(entry: dict[str, Any], project_root: Path | None) -> bool:
@@ -584,7 +686,12 @@ def _apply_entry(entry: dict[str, Any], project_root: Path | None) -> dict[str, 
     }
 
 
-def execute_save(request: dict[str, Any], project_root: Path | None = None) -> tuple[dict[str, Any], str, list[dict[str, Any]], list[dict[str, Any]]]:
+def execute_save(
+    request: dict[str, Any],
+    project_root: Path | None = None,
+    *,
+    request_file: Path | None = None,
+) -> tuple[dict[str, Any], str, list[dict[str, Any]], list[dict[str, Any]]]:
     if not paths.memory_root(project_root).exists():
         raise SaveError("NOT_INITIALIZED", ".memory/ directory not found. Run memory-hub init first.")
 
@@ -629,11 +736,28 @@ def execute_save(request: dict[str, Any], project_root: Path | None = None) -> t
     ai_actions: list[dict[str, Any]] = []
     manual_actions: list[dict[str, Any]] = []
     response_code = "NOOP"
+    trace_output: dict[str, Any] = {"update_supersedes": [], "trace_file": None, "warning": None}
     if changed:
         generate_brief(project_root)
         repair_result = repair(project_root)
         for entry in validated_entries:
             _restore_entry_summary(entry, project_root)
+        update_traces = _update_traces(validated_entries)
+        trace_output = {
+            "update_supersedes": update_traces,
+            "trace_file": None,
+            "warning": None,
+        }
+        if update_traces:
+            try:
+                trace_output["trace_file"] = _write_save_trace_artifact(
+                    update_traces,
+                    task=normalized.get("task"),
+                    request_file=request_file,
+                    project_root=project_root,
+                )
+            except (OSError, UnicodeError) as exc:
+                trace_output["warning"] = f"save trace not persisted: {exc}"
         rebuild = {
             "brief": True,
             "catalog_repair": repair_result,
@@ -651,6 +775,7 @@ def execute_save(request: dict[str, Any], project_root: Path | None = None) -> t
         "indexed": indexed,
         "rebuild": rebuild,
         "verified_evidence": verified_evidence,
+        "trace": trace_output,
     }
     return data, response_code, ai_actions, manual_actions
 
@@ -661,8 +786,8 @@ def run(args: list[str]) -> None:
     parser.add_argument("--project-root", help="Project root directory", default=None)
     parsed = parser.parse_args(args)
 
-    project_root = Path(parsed.project_root) if parsed.project_root else None
-    request_file = Path(parsed.file)
+    project_root = _effective_project_root(Path(parsed.project_root)) if parsed.project_root else _effective_project_root(None)
+    request_file = _resolve_runtime_path(Path(parsed.file))
     if not request_file.exists():
         envelope.fail("FILE_NOT_FOUND", f"Save file not found: {parsed.file}")
 
@@ -672,7 +797,7 @@ def run(args: list[str]) -> None:
         envelope.fail("INVALID_JSON", f"Failed to parse save file: {exc}")
 
     try:
-        data, code, ai_actions, manual_actions = execute_save(request, project_root)
+        data, code, ai_actions, manual_actions = execute_save(request, project_root, request_file=request_file)
     except SaveError as exc:
         envelope.fail(exc.code, exc.message, details=exc.details)
 

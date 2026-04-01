@@ -95,6 +95,9 @@ py -3 -m lib.cli read <bucket> <filename>
 - `create` 必须带 `index.topic` / `index.summary`
 - `append` 的 `section_markdown` 必须包含新的 heading
 - `update` 必须带 `payload.supersedes`
+- `update` 成功后，save core 会尽力在 `.memory/session/save-trace/` 下写入当前这次 save 的单独 trace artifact；若 trace 持久化失败，不影响 durable docs 已生效的 save 结果
+- `trace_file` 应返回仓库内相对路径，优先引用当前 save request 的 repo-relative 路径；若 request 文件不在仓库内，artifact 中的 `request_ref` 应退化为 basename 或 `null`
+- 旧的 `.memory/session/save-trace.jsonl` 视为 legacy session artifact：新实现不读取、不迁移回放
 - 若 `source_refs` 中引用了 working set excerpt，写入内容不能与 excerpt 原样相同，也不能整段嵌入
 
 ### Step 6：调用 `save` core

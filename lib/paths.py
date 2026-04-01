@@ -23,6 +23,7 @@ DOCS_DIR = "docs"
 MANIFEST_FILE = "manifest.json"
 INBOX_DIR = "inbox"
 SESSION_DIR = "session"
+SAVE_TRACE_DIR = "save-trace"
 BRIEF_FILE = "BRIEF.md"
 
 
@@ -85,6 +86,16 @@ def session_root(project_root: Path | None = None) -> Path:
 def session_file_path(slug: str, suffix: str = ".json", project_root: Path | None = None) -> Path:
     """Return path to .memory/session/<slug><suffix>."""
     return session_root(project_root) / f"{slug}{suffix}"
+
+
+def save_trace_root(project_root: Path | None = None) -> Path:
+    """Return the .memory/session/save-trace/ directory path."""
+    return session_root(project_root) / SAVE_TRACE_DIR
+
+
+def save_trace_file_path(filename: str, project_root: Path | None = None) -> Path:
+    """Return path to .memory/session/save-trace/<filename>."""
+    return save_trace_root(project_root) / filename
 
 
 def brief_path(project_root: Path | None = None) -> Path:

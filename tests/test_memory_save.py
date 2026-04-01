@@ -1,6 +1,9 @@
 """Tests for memory.save"""
 
 import json
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+from unittest.mock import patch
 import pytest
 from io import StringIO
 import sys
@@ -217,6 +220,7 @@ class TestSave:
         assert "## 优惠券规则" in content
         assert "满减后再校验上限" in content
         assert result["data"]["writes"] == ["docs/pm/decisions.md"]
+        assert result["data"]["trace"] == {"update_supersedes": [], "trace_file": None, "warning": None}
 
     def test_append_refreshes_registered_topics_summary(self, initialized_project, tmp_path):
         result, code = run_cmd(
@@ -423,11 +427,250 @@ class TestSave:
         assert result["code"] == "SUCCESS"
         assert result["data"]["applied"][0]["action"] == "update"
         assert result["data"]["applied"][0]["summary_refreshed"] is True
+        trace = result["data"]["trace"]
+        assert trace["trace_file"]
+        assert trace["trace_file"].startswith(".memory/session/save-trace/")
+        assert trace["trace_file"].endswith(".json")
+        assert trace["warning"] is None
+        assert trace["update_supersedes"] == [{
+            "target": "docs/pm/decisions.md",
+            "supersedes": "旧规则的结论已经过时",
+            "previous_summary": "规则：旧规则",
+            "new_summary": "产品结论：新规则",
+        }]
         content = (initialized_project / ".memory" / "docs" / "pm" / "decisions.md").read_text(encoding="utf-8")
         assert "- 新规则" in content
         assert "- 旧规则" not in content
         topics = (initialized_project / ".memory" / "catalog" / "topics.md").read_text(encoding="utf-8")
         assert "docs/pm/decisions.md — 产品结论：新规则" in topics
+        trace_file = initialized_project / trace["trace_file"]
+        trace_payload = json.loads(trace_file.read_text(encoding="utf-8"))
+        assert trace_payload["kind"] == "save_trace"
+        assert trace_payload["task"] == "update outdated rule"
+        assert trace_payload["request_ref"] == "save-update.json"
+        assert trace_payload["update_supersedes"] == trace["update_supersedes"]
+
+    def test_update_trace_uses_repo_relative_request_ref_by_default_cli(self, initialized_project, monkeypatch):
+        request = {
+            "version": "1",
+            "task": "update outdated rule",
+            "entries": [
+                {
+                    "id": "update-1",
+                    "action": "update",
+                    "reason": "old rule outdated",
+                    "target": {"bucket": "pm", "file": "decisions.md"},
+                    "payload": {
+                        "doc_markdown": "## 产品结论\n\n- 新规则\n",
+                        "supersedes": "旧规则的结论已经过时",
+                    },
+                    "evidence": {
+                        "search_queries": ["旧规则"],
+                        "read_refs": ["docs/pm/decisions.md", "docs/qa/strategy.md"],
+                    },
+                }
+            ],
+        }
+        request_file = initialized_project / ".memory" / "session" / "save-update-default.json"
+        write_json(request_file, request)
+        monkeypatch.chdir(initialized_project)
+
+        result, code = run_cmd("lib.memory_save", ["--file", ".memory/session/save-update-default.json"])
+
+        assert code == 0
+        trace = result["data"]["trace"]
+        assert trace["trace_file"].startswith(".memory/session/save-trace/")
+        trace_payload = json.loads((initialized_project / trace["trace_file"]).read_text(encoding="utf-8"))
+        assert trace_payload["request_ref"] == ".memory/session/save-update-default.json"
+
+    def test_update_trace_uses_repo_relative_request_ref_with_explicit_project_root(self, initialized_project, monkeypatch):
+        request = {
+            "version": "1",
+            "task": "update outdated rule",
+            "entries": [
+                {
+                    "id": "update-1",
+                    "action": "update",
+                    "reason": "old rule outdated",
+                    "target": {"bucket": "pm", "file": "decisions.md"},
+                    "payload": {
+                        "doc_markdown": "## 产品结论\n\n- 新规则\n",
+                        "supersedes": "旧规则的结论已经过时",
+                    },
+                    "evidence": {
+                        "search_queries": ["旧规则"],
+                        "read_refs": ["docs/pm/decisions.md", "docs/qa/strategy.md"],
+                    },
+                }
+            ],
+        }
+        request_file = initialized_project / ".memory" / "session" / "save-update-explicit.json"
+        write_json(request_file, request)
+        monkeypatch.chdir(initialized_project)
+
+        result, code = run_cmd(
+            "lib.memory_save",
+            ["--file", ".memory/session/save-update-explicit.json", "--project-root", str(initialized_project)],
+        )
+
+        assert code == 0
+        trace = result["data"]["trace"]
+        assert trace["trace_file"].startswith(".memory/session/save-trace/")
+        trace_payload = json.loads((initialized_project / trace["trace_file"]).read_text(encoding="utf-8"))
+        assert trace_payload["request_ref"] == ".memory/session/save-update-explicit.json"
+
+    def test_write_save_trace_artifact_creates_distinct_files_under_concurrency(self, initialized_project):
+        from datetime import datetime, timezone
+        import lib.memory_save as memory_save
+
+        request_file = initialized_project / ".memory" / "session" / "save-update.json"
+        request_file.write_text("{}", encoding="utf-8")
+        traces = [{
+            "target": "docs/pm/decisions.md",
+            "supersedes": "旧规则已经废弃",
+            "previous_summary": "规则：旧规则",
+            "new_summary": "产品结论：新规则",
+        }]
+        barrier = Barrier(8)
+
+        class FixedDatetime:
+            @staticmethod
+            def now(tz=None):
+                return datetime(2026, 4, 2, 9, 0, 0, 123456, tzinfo=timezone.utc)
+
+        def write_trace(_: int) -> str | None:
+            barrier.wait()
+            return memory_save._write_save_trace_artifact(
+                traces,
+                task="update outdated rule",
+                request_file=request_file,
+                project_root=initialized_project,
+            )
+
+        with patch("lib.memory_save.datetime", FixedDatetime):
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                trace_files = list(executor.map(write_trace, range(8)))
+
+        assert len(trace_files) == 8
+        assert len(set(trace_files)) == 8
+        for trace_ref in trace_files:
+            assert trace_ref is not None
+            trace_file = initialized_project / trace_ref
+            assert trace_file.exists()
+            trace_payload = json.loads(trace_file.read_text(encoding="utf-8"))
+            assert trace_payload["kind"] == "save_trace"
+            assert trace_payload["request_ref"] == ".memory/session/save-update.json"
+            assert trace_payload["update_supersedes"] == traces
+
+    def test_update_trace_persistence_failure_does_not_fail_save(self, initialized_project, tmp_path):
+        request = {
+            "version": "1",
+            "task": "update outdated rule",
+            "entries": [
+                {
+                    "id": "update-1",
+                    "action": "update",
+                    "reason": "old rule outdated",
+                    "target": {"bucket": "pm", "file": "decisions.md"},
+                    "payload": {
+                        "doc_markdown": "## 产品结论\n\n- 新规则\n",
+                        "supersedes": "旧规则的结论已经过时",
+                    },
+                    "evidence": {
+                        "search_queries": ["旧规则"],
+                        "read_refs": ["docs/pm/decisions.md", "docs/qa/strategy.md"],
+                    },
+                }
+            ],
+        }
+        request_file = tmp_path / "save-update-warning.json"
+        write_json(request_file, request)
+
+        with patch("lib.memory_save._write_save_trace_artifact", side_effect=OSError("disk full")):
+            result, code = run_cmd("lib.memory_save", ["--file", str(request_file), "--project-root", str(initialized_project)])
+
+        assert code == 0
+        assert result["code"] == "SUCCESS"
+        assert result["data"]["trace"]["trace_file"] is None
+        assert result["data"]["trace"]["warning"] == "save trace not persisted: disk full"
+        content = (initialized_project / ".memory" / "docs" / "pm" / "decisions.md").read_text(encoding="utf-8")
+        assert "- 新规则" in content
+
+    def test_update_trace_encoding_failure_does_not_fail_save(self, initialized_project, tmp_path):
+        request = {
+            "version": "1",
+            "task": "update outdated rule",
+            "entries": [
+                {
+                    "id": "update-1",
+                    "action": "update",
+                    "reason": "old rule outdated",
+                    "target": {"bucket": "pm", "file": "decisions.md"},
+                    "payload": {
+                        "doc_markdown": "## 产品结论\n\n- 新规则\n",
+                        "supersedes": "旧规则的结论已经过时",
+                    },
+                    "evidence": {
+                        "search_queries": ["旧规则"],
+                        "read_refs": ["docs/pm/decisions.md", "docs/qa/strategy.md"],
+                    },
+                }
+            ],
+        }
+        request_file = tmp_path / "save-update-encoding-warning.json"
+        write_json(request_file, request)
+
+        import lib.memory_save as memory_save
+
+        original_atomic_write = memory_save.atomic_write
+
+        def fail_trace_atomic_write(filepath, content):
+            if "/save-trace/" in filepath.as_posix():
+                raise UnicodeEncodeError("utf-8", "\ud800", 0, 1, "surrogates not allowed")
+            return original_atomic_write(filepath, content)
+
+        with patch("lib.memory_save.atomic_write", side_effect=fail_trace_atomic_write):
+            result, code = run_cmd("lib.memory_save", ["--file", str(request_file), "--project-root", str(initialized_project)])
+
+        assert code == 0
+        assert result["code"] == "SUCCESS"
+        assert result["data"]["trace"]["trace_file"] is None
+        assert "save trace not persisted:" in result["data"]["trace"]["warning"]
+        content = (initialized_project / ".memory" / "docs" / "pm" / "decisions.md").read_text(encoding="utf-8")
+        assert "- 新规则" in content
+
+    def test_legacy_shared_trace_file_is_ignored(self, initialized_project, tmp_path):
+        legacy_file = initialized_project / ".memory" / "session" / "save-trace.jsonl"
+        legacy_file.parent.mkdir(parents=True, exist_ok=True)
+        legacy_file.write_text('{"legacy": true}\n', encoding="utf-8")
+
+        request = {
+            "version": "1",
+            "task": "update outdated rule",
+            "entries": [
+                {
+                    "id": "update-1",
+                    "action": "update",
+                    "reason": "old rule outdated",
+                    "target": {"bucket": "pm", "file": "decisions.md"},
+                    "payload": {
+                        "doc_markdown": "## 产品结论\n\n- 新规则\n",
+                        "supersedes": "旧规则的结论已经过时",
+                    },
+                    "evidence": {
+                        "search_queries": ["旧规则"],
+                        "read_refs": ["docs/pm/decisions.md", "docs/qa/strategy.md"],
+                    },
+                }
+            ],
+        }
+        request_file = tmp_path / "save-update-legacy.json"
+        write_json(request_file, request)
+
+        result, code = run_cmd("lib.memory_save", ["--file", str(request_file), "--project-root", str(initialized_project)])
+        assert code == 0
+        assert result["data"]["trace"]["trace_file"].startswith(".memory/session/save-trace/")
+        assert legacy_file.read_text(encoding="utf-8") == '{"legacy": true}\n'
 
     def test_working_set_excerpt_cannot_be_written_verbatim(self, initialized_project, tmp_path):
         excerpt = "## 决策\n\n- Working set raw conclusion\n"
@@ -488,6 +731,108 @@ class TestSave:
         result, code = run_cmd("lib.memory_save", ["--file", str(request_file), "--project-root", str(initialized_project)])
         assert code == 1
         assert result["code"] == "WORKING_SET_VERBATIM_FORBIDDEN"
+
+    def test_missing_session_json_source_ref_is_treated_as_working_set(self, initialized_project, tmp_path):
+        excerpt = "## 决策\n\n- Working set raw conclusion\n"
+        request = {
+            "version": "1",
+            "entries": [
+                {
+                    "id": "create-1",
+                    "action": "create",
+                    "reason": "stable architecture decision",
+                    "target": {"bucket": "architect", "file": "raw-working-set-via-session-ref.md"},
+                    "payload": {"doc_markdown": excerpt},
+                    "index": {"topic": "working-set", "summary": "bad save"},
+                    "evidence": {
+                        "search_queries": ["Working set raw conclusion"],
+                        "read_refs": ["docs/architect/decisions.md"],
+                        "source_refs": [
+                            {
+                                "type": "session_artifact",
+                                "path": ".memory/session/missing-session.json",
+                                "excerpt": excerpt,
+                            }
+                        ],
+                    },
+                }
+            ],
+        }
+        request_file = tmp_path / "save-missing-session-source-ref.json"
+        write_json(request_file, request)
+
+        result, code = run_cmd("lib.memory_save", ["--file", str(request_file), "--project-root", str(initialized_project)])
+        assert code == 1
+        assert result["code"] == "WORKING_SET_VERBATIM_FORBIDDEN"
+
+    def test_non_session_source_ref_with_working_set_in_filename_is_not_treated_as_working_set(self, initialized_project, tmp_path):
+        excerpt = "## 决策\n\n- 合法的长期结论\n"
+        request = {
+            "version": "1",
+            "entries": [
+                {
+                    "id": "create-1",
+                    "action": "create",
+                    "reason": "stable architecture decision",
+                    "target": {"bucket": "architect", "file": "valid-decision.md"},
+                    "payload": {"doc_markdown": excerpt},
+                    "index": {"topic": "valid-decision", "summary": "valid save"},
+                    "evidence": {
+                        "search_queries": ["合法的长期结论"],
+                        "read_refs": ["docs/architect/decisions.md"],
+                        "source_refs": [
+                            {
+                                "type": "note",
+                                "path": "notes/working-set-retrospective.md",
+                                "excerpt": excerpt,
+                            }
+                        ],
+                    },
+                }
+            ],
+        }
+        request_file = tmp_path / "save-non-session-working-set-name.json"
+        write_json(request_file, request)
+
+        result, code = run_cmd("lib.memory_save", ["--file", str(request_file), "--project-root", str(initialized_project)])
+        assert code == 0
+        assert result["code"] == "SUCCESS"
+        content = (initialized_project / ".memory" / "docs" / "architect" / "valid-decision.md").read_text(encoding="utf-8")
+        assert "合法的长期结论" in content
+
+    def test_execute_save_uses_project_root_for_relative_request_ref(self, initialized_project, monkeypatch, tmp_path):
+        request = {
+            "version": "1",
+            "task": "update outdated rule",
+            "entries": [
+                {
+                    "id": "update-1",
+                    "action": "update",
+                    "reason": "old rule outdated",
+                    "target": {"bucket": "pm", "file": "decisions.md"},
+                    "payload": {
+                        "doc_markdown": "## 产品结论\n\n- 新规则\n",
+                        "supersedes": "旧规则的结论已经过时",
+                    },
+                    "evidence": {
+                        "search_queries": ["旧规则"],
+                        "read_refs": ["docs/pm/decisions.md", "docs/qa/strategy.md"],
+                    },
+                }
+            ],
+        }
+        request_ref = Path(".memory/session/save-update-direct.json")
+        write_json(initialized_project / request_ref, request)
+        monkeypatch.chdir(tmp_path)
+
+        import lib.memory_save as memory_save
+
+        data, code, _, _ = memory_save.execute_save(request, initialized_project, request_file=request_ref)
+
+        assert code == "SUCCESS"
+        trace = data["trace"]
+        trace_payload = json.loads((initialized_project / trace["trace_file"]).read_text(encoding="utf-8"))
+        assert trace_payload["request_ref"] == ".memory/session/save-update-direct.json"
 
     def test_source_refs_must_be_list_when_provided(self, initialized_project, tmp_path):
         request = {
