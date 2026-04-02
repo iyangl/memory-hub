@@ -32,6 +32,17 @@
 
 不写入的场景：只读了代码、只执行了已有方案、没有新增的“为什么 / 不要什么 / 要验证什么”。
 
+## Repo 协作产物路由（本项目约定）
+
+以下规则只用于本仓库的协作与接力，不属于 memory-hub 通用数据模型：
+
+- `.memory/inbox/`：Layer 2 临时候选知识；不要求跨设备保留，不作为 Git-tracked handoff 材料
+- `.memory/session/`：当前任务 / 当前会话的运行态产物；不要求跨设备保留，不作为 Git-tracked handoff 材料
+- 需要 Git 跟踪的设计草案、实施计划、跨电脑接力材料：统一写入 `.claude/plan/`
+- 只有确认应进入长期知识库的内容，才通过 `/memory-hub:save` 进入 `.memory/docs/`
+
+换句话说：`record this / 记录下来` 若目的是为了后续开发接力，应优先落到 `.claude/plan/`；若目的是暂存候选知识，再写入 `.memory/inbox/`。
+
 ## 存储结构
 
 ```text
