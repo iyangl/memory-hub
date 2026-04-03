@@ -26,8 +26,9 @@ Codex 没有 slash command，按 `.claude/commands/memory-hub/init.md`、`recall
 - 对当前任务执行 `py -3 -m lib.cli recall-plan --task "..." --out .memory/session/recall-plan.json`
 - 根据 planner 结果决定 `skip | light | deep`
 - 若 `search_first = true`，必须先 search / catalog-read / read，再决定来源
-- 若为 `deep`，执行 `py -3 -m lib.cli working-set --plan-file .memory/session/recall-plan.json`
-- working set 是压缩、去重、限长后的任务上下文，保留来源、原因和 evidence gaps
+- 若为 `deep`，执行 `py -3 -m lib.cli working-set --plan-file .memory/session/recall-plan.json --out .memory/session/working-set.json`
+- working set 当前按 `resume-pack(v1)` 理解：它是压缩、去重、限长后的任务上下文，保留来源、原因和 evidence gaps，并显式给出 `primary_evidence_gap` 与 `verification_focus`
+- 若需要把 act 前边界固定下来，再执行 `py -3 -m lib.cli execution-contract --working-set-file .memory/session/working-set.json --out .memory/session/execution-contract.json`
 
 ### 保存记忆
 
@@ -62,7 +63,7 @@ Codex 没有 slash command，按 `.claude/commands/memory-hub/init.md`、`recall
     topics.md
     modules/
   inbox/            <- Layer 2 临时写入区
-  session/          <- recall-plan / working-set / save-request 等会话产物
+  session/          <- recall-plan / working-set / execution-contract / save-request 等会话产物
 ```
 
 ## 硬边界
@@ -96,6 +97,7 @@ memory-hub brief
 memory-hub scan-modules [--out <file>]
 memory-hub recall-plan --task "<task>" [--out <file>]
 memory-hub working-set --plan-file <path> [--out <file>]
+memory-hub execution-contract --working-set-file <path> [--out <file>]
 memory-hub save --file <path>
 memory-hub inbox-list
 memory-hub inbox-clean [--before <ISO>]

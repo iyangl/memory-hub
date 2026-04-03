@@ -63,16 +63,25 @@ def test_recall_first_flow(tmp_path):
     planned = json.loads(plan_path.read_text(encoding="utf-8"))
     assert planned["recall_level"] == "deep"
 
-    result, code = run_cmd("lib.session_working_set", ["--plan-file", str(plan_path), "--project-root", str(tmp_path)])
+    working_set_path = tmp_path / "working-set.json"
+    result, code = run_cmd("lib.session_working_set", ["--plan-file", str(plan_path), "--project-root", str(tmp_path), "--out", str(working_set_path)])
     assert code == 0
     assert result["data"]["items"]
-    assert "output_file" in result["data"]
+    assert result["data"]["output_file"] == str(working_set_path)
 
     navigation = next(item for item in result["data"]["items"] if item["kind"] == "navigation")
     assert any(bullet.startswith("约束: ") for bullet in navigation["bullets"])
     assert any(bullet.startswith("风险: ") for bullet in navigation["bullets"])
     assert any(bullet.startswith("验证: ") for bullet in navigation["bullets"])
     assert result["data"]["priority_reads"]
+
+    contract_path = tmp_path / "execution-contract.json"
+    result, code = run_cmd("lib.execution_contract", ["--working-set-file", str(working_set_path), "--project-root", str(tmp_path), "--out", str(contract_path)])
+    assert code == 0
+    assert result["data"]["output_file"] == str(contract_path)
+    assert result["data"]["source_working_set"] == str(working_set_path)
+    assert "known_context" in result["data"]
+    assert "allowed_sources" in result["data"]
 
 
 

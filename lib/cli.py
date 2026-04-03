@@ -19,6 +19,7 @@ COMMANDS = {
     "scan-modules": "lib.scan_modules",
     "recall-plan": "lib.recall_planner",
     "working-set": "lib.session_working_set",
+    "execution-contract": "lib.execution_contract",
     "save": "lib.memory_save",
     "inbox-list": "lib.inbox_list",
     "inbox-clean": "lib.inbox_clean",

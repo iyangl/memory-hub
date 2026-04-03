@@ -638,6 +638,8 @@ def plan_recall(task: str, project_root: Path | None = None) -> dict:
         evidence_gaps.append("尚未找到明确的 durable docs 命中。")
     if not module_matches:
         evidence_gaps.append("尚未找到明确的 module card 命中。")
+    evidence_gaps = list(dict.fromkeys(evidence_gaps))
+    primary_evidence_gap = evidence_gaps[0] if evidence_gaps else None
 
     return {
         "version": "1",
@@ -669,6 +671,7 @@ def plan_recall(task: str, project_root: Path | None = None) -> dict:
         ],
         "why_these": why_these,
         "evidence_gaps": evidence_gaps,
+        "primary_evidence_gap": primary_evidence_gap,
     }
 
 

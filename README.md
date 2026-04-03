@@ -7,7 +7,8 @@
 - `.memory/docs/` 是唯一正本；`BRIEF.md`、`catalog/`、`session/` 都是派生产物
 - 三个 command 驱动主循环：`init / recall / save`
 - recall 不是“把所有资料都读一遍”，而是先做 `recall-plan`，再按 `skip | light | deep` 决定读取范围
-- deep recall 通过 `working-set` 组装任务级上下文；working set 会做压缩、去重、限长，并偏向决策 / 约束 / 风险 / 验证
+- deep recall 通过 `working-set` 组装任务级上下文；当前可将其视为 `resume-pack(v1)`，working set 会做压缩、去重、限长，并显式给出 `primary_evidence_gap` 与 `verification_focus`
+- 在 `working-set(resume-pack)` 之后，可继续生成 `execution-contract` 作为 act 前的机器可读边界
 - 保存阶段遵守 `Read Before Write`，并显式判定 `noop | create | append | merge | update`
 - `memory-hub save --file <save.json>` 是代码级 correctness core：非 `noop` 必须带 search/read evidence，写后自动重建 `BRIEF.md` 与 `catalog-repair`
 - 只沉淀代码本身读不到的长期知识，例如决策、约束、风险、验证重点、业务口径
@@ -54,7 +55,7 @@ memory-hub <command> [args]
     topics.md       <- 全局 topics 索引
     modules/        <- 模块导航卡
   inbox/            <- Layer 2 临时写入区
-  session/          <- recall-plan / working-set / save-request 等会话产物
+  session/          <- recall-plan / working-set / execution-contract / save-request 等会话产物
 ```
 
 ## 三个 Command
@@ -77,7 +78,7 @@ memory-hub <command> [args]
 4. **按需深入**：
    - `skip`：直接开始工作或只补读极少量来源
    - `light`：读取 base brief + 少量相关 docs / module cards
-   - `deep`：构建压缩后的 `working-set`，把高相关来源整理成任务级上下文
+   - `deep`：构建压缩后的 `working-set`（当前按 `resume-pack(v1)` 理解），把高相关来源整理成任务级上下文，并优先暴露 `primary_evidence_gap` 与 `verification_focus`；必要时再生成 `execution-contract`，把 act 前边界固定下来
 5. **工作过程**：如产生新知识，可把候选结论暂存到 `.memory/inbox/`
 6. **会话结束**：运行 `save`，通过后悔测试筛选 durable knowledge，显式判定 `noop/create/append/merge/update`，再调用 `save` core 执行写入与重建
 
@@ -97,7 +98,7 @@ memory-hub <command> [args]
 
 ### `session/*`
 
-- 保存当前任务的 recall plan、working set、save request、save trace 等会话产物（例如 `*.json`）
+- 保存当前任务的 recall plan、working set、execution-contract、save request、save trace 等会话产物（例如 `*.json`）
 - `save-trace` 推荐落在 `.memory/session/save-trace/`，采用每次 save 一个独立 artifact 的模型
 - 只服务当前会话或当前任务
 - 不应原样写回长期 docs
@@ -117,6 +118,7 @@ memory-hub brief
 memory-hub scan-modules [--out <file>]
 memory-hub recall-plan --task "<task>" [--out <file>]
 memory-hub working-set --plan-file <path> [--out <file>]
+memory-hub execution-contract --working-set-file <path> [--out <file>]
 memory-hub save --file <path>
 memory-hub inbox-list
 memory-hub inbox-clean [--before <ISO>]

@@ -19,6 +19,7 @@ MAX_BULLETS_PER_ITEM = 4
 MAX_TOTAL_BULLETS = 16
 MAX_EVIDENCE_GAPS = 5
 MAX_DURABLE_CANDIDATES = 3
+DURABLE_CANDIDATE_PLACEHOLDER = "仅当 working set 中的结论被确认会影响未来动作时，才在 /save 阶段提炼进长期 docs。"
 DOC_KIND_BY_BUCKET = {
     "architect": "decision",
     "pm": "decision",
@@ -271,7 +272,17 @@ def _build_durable_candidates(items: list[dict]) -> list[str]:
     candidates = _unique_strings(candidates)[:MAX_DURABLE_CANDIDATES]
     if candidates:
         return candidates
-    return ["仅当 working set 中的结论被确认会影响未来动作时，才在 /save 阶段提炼进长期 docs。"]
+    return [DURABLE_CANDIDATE_PLACEHOLDER]
+
+
+def _build_verification_focus(items: list[dict]) -> list[str]:
+    focus: list[str] = []
+    for item in items:
+        for bullet in item.get("bullets", []):
+            if not bullet.startswith("验证:"):
+                continue
+            focus.append(bullet[len("验证:"):].strip())
+    return _unique_strings(focus)
 
 
 def build_working_set(plan: dict, project_root: Path | None = None, source_plan: str | None = None) -> dict:
@@ -312,6 +323,7 @@ def build_working_set(plan: dict, project_root: Path | None = None, source_plan:
     )
     items = _compress_items(ordered_items)
     evidence_gaps = _unique_strings(plan.get("evidence_gaps", []))[:MAX_EVIDENCE_GAPS]
+    primary_evidence_gap = plan.get("primary_evidence_gap")
     why_these = _unique_strings(plan.get("why_these", []))
 
     return {
@@ -322,6 +334,8 @@ def build_working_set(plan: dict, project_root: Path | None = None, source_plan:
         "items": items,
         "priority_reads": _build_priority_reads(plan, project_root),
         "evidence_gaps": evidence_gaps,
+        "primary_evidence_gap": primary_evidence_gap,
+        "verification_focus": _build_verification_focus(items),
         "durable_candidates": _build_durable_candidates(items),
     }
 

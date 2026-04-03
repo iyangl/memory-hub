@@ -16,7 +16,8 @@
 - recall 的核心是“先定位，再决定读什么”，不是把所有文档都读一遍
 - 对当前任务先做 `recall-plan`，再根据 `skip | light | deep` 选择读取范围
 - 若 `search_first = true`，必须先 search / catalog-read / read，再决定来源
-- deep recall 使用 `working-set` 组织任务级上下文；working set 会做去重、压缩、限长，并偏向决策 / 约束 / 风险 / 验证
+- deep recall 使用 `working-set` 组织任务级上下文；当前按 `resume-pack(v1)` 理解，working set 会做去重、压缩、限长，并显式给出 `primary_evidence_gap` 与 `verification_focus`
+- 在 `working-set(resume-pack)` 之后，可按需生成 `execution-contract` 作为 act 前边界
 - 保存阶段默认走 `memory-hub save --file <save.json>` correctness core
 - 每条候选知识都要显式判定为 `noop | create | append | merge | update`
 - 非 `noop` 保存必须提供 search + read evidence，且 working set 不能原样落长期 docs
@@ -58,7 +59,7 @@
     topics.md
     modules/
   inbox/            <- Layer 2 临时写入区
-  session/          <- recall-plan / working-set / save-request 等会话产物
+  session/          <- recall-plan / working-set / execution-contract / save-request 等会话产物
 ```
 
 ## 硬边界
@@ -91,6 +92,7 @@ memory-hub brief
 memory-hub scan-modules [--out <file>]
 memory-hub recall-plan --task "<task>" [--out <file>]
 memory-hub working-set --plan-file <path> [--out <file>]
+memory-hub execution-contract --working-set-file <path> [--out <file>]
 memory-hub save --file <path>
 memory-hub inbox-list
 memory-hub inbox-clean [--before <ISO>]

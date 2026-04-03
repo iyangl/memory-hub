@@ -62,6 +62,7 @@ planner 的职责：
 - 推荐相关 docs / modules
 - 给出 `why_these`
 - 明确 `evidence_gaps`
+- 给出 `primary_evidence_gap`（当前主证据缺口）
 
 ### Step 4：Search Before Guess
 
@@ -94,21 +95,35 @@ py -3 -m lib.cli read <bucket> <filename>
 - 先根据 planner 结果构建 working set：
 
 ```bash
-py -3 -m lib.cli working-set --plan-file .memory/session/recall-plan.json
+py -3 -m lib.cli working-set --plan-file .memory/session/recall-plan.json --out .memory/session/working-set.json
 ```
 
-- working set 会把高相关来源压缩成去重、限长、可直接消费的任务上下文
+- working set 当前视为 `resume-pack(v1)`：会把高相关来源压缩成去重、限长、可直接消费的任务上下文
 - module item 会尽量带上约束、风险、验证重点
+- 先看 `primary_evidence_gap`，明确当前最主要的证据缺口
+- 再看 `verification_focus`，明确继续执行时最该盯住的验证点
 - 再把 working set 注入当前上下文
 - 如果 `evidence_gaps` 仍存在，先补读，再开始工作
+
+### Step 5.5：生成 execution-contract（仅 deep）
+
+```bash
+py -3 -m lib.cli execution-contract --working-set-file .memory/session/working-set.json --out .memory/session/execution-contract.json
+```
+
+- `execution-contract` 是 act 前边界：只固定 goal、allowed_sources、required_evidence、success_criteria 与 durable_candidates
+- 它不替代 `working-set`，也不是 `save` 的正式输入
+- 若 `primary_evidence_gap` 仍未解决，优先按 contract 补证据，再开始执行
 
 ### Step 6：确认就绪
 
 向用户简短确认：
 - 已读取的知识范围
 - recall level
-- 若为 deep，说明已生成 working set
-- 若仍有 evidence gaps，明确列出
+- 若为 deep，说明已生成 `working-set`（当前按 `resume-pack(v1)` 理解）与 `execution-contract`
+- 若有 `primary_evidence_gap`，优先明确指出
+- 若有 `verification_focus`，简要列出
+- 若仍有 `evidence_gaps`，明确列出
 
 ---
 

@@ -39,6 +39,7 @@ def test_build_working_set_keeps_sources_and_structured_module_context(project):
             {"name": "checkout", "reason": "金额链路风险", "priority": 2, "entry_points": ["packages/checkout/rules.ts"]},
         ],
         "evidence_gaps": ["尚未确认 promotion 是否参与", "尚未确认 promotion 是否参与"],
+        "primary_evidence_gap": "尚未确认 promotion 是否参与",
         "why_these": ["任务涉及业务规则与主模块入口"],
     }
     result = build_working_set(plan, project, "plan.json")
@@ -56,6 +57,8 @@ def test_build_working_set_keeps_sources_and_structured_module_context(project):
 
     module_reads = [item for item in result["priority_reads"] if item["type"] == "module"]
     assert len(module_reads) == 1
+    assert result["primary_evidence_gap"] == "尚未确认 promotion 是否参与"
+    assert result["verification_focus"] == ["回归价格计算。"]
     assert result["durable_candidates"]
 
 
@@ -99,6 +102,96 @@ def test_working_set_applies_limits_and_dedupes(tmp_path):
     assert result["evidence_gaps"] == ["gap-1", "gap-2", "gap-3", "gap-4", "gap-5"]
     assert len(result["durable_candidates"]) <= 3
     assert result["summary"] == "需要读取多份规则 需要读取多个模块"
+
+
+def test_verification_focus_only_uses_compressed_items(tmp_path):
+    memory = tmp_path / ".memory"
+    (memory / "docs" / "pm").mkdir(parents=True)
+    (memory / "catalog" / "modules").mkdir(parents=True)
+
+    (memory / "docs" / "pm" / "rule.md").write_text(
+        "## 规则\n\n- 规则一\n- 规则二\n- 规则三\n- 规则四\n- 验证: 不应回流\n",
+        encoding="utf-8",
+    )
+    (memory / "catalog" / "modules" / "checkout.md").write_text(
+        "# checkout\n\n## 何时阅读\n\n当任务涉及结算时阅读。\n\n## 推荐入口\n- `packages/checkout/index.ts`\n\n## 隐含约束\n- 先确认优惠规则。\n\n## 主要风险\n- 金额错误。\n\n## 验证重点\n- 回归价格计算。\n",
+        encoding="utf-8",
+    )
+
+    plan = {
+        "task": "验证 checkout",
+        "recall_level": "deep",
+        "recommended_docs": [
+            {"bucket": "pm", "file": "rule.md", "reason": "规则", "priority": 1},
+        ],
+        "recommended_modules": [
+            {"name": "checkout", "reason": "主模块", "priority": 2, "entry_points": ["packages/checkout/index.ts"]},
+        ],
+        "evidence_gaps": [],
+        "why_these": ["需要规则和模块"],
+    }
+
+    result = build_working_set(plan, tmp_path, "plan.json")
+    assert result["verification_focus"] == ["回归价格计算。"]
+    assert all(focus != "不应回流" for focus in result["verification_focus"])
+
+
+def test_verification_focus_dedupes_and_preserves_order(tmp_path):
+    memory = tmp_path / ".memory"
+    (memory / "catalog" / "modules").mkdir(parents=True)
+
+    recommended_modules = []
+    for name, verification, priority in [
+        ("checkout", "回归价格计算", 1),
+        ("pricing", "回归价格计算", 2),
+        ("coupon", "核对边界条件", 3),
+    ]:
+        (memory / "catalog" / "modules" / f"{name}.md").write_text(
+            f"# {name}\n\n## 何时阅读\n\n当任务涉及 {name} 时阅读。\n\n## 推荐入口\n- `{name}/index.ts`\n\n## 隐含约束\n- 约束 {name}\n\n## 主要风险\n- 风险 {name}\n\n## 验证重点\n- {verification}\n",
+            encoding="utf-8",
+        )
+        recommended_modules.append(
+            {"name": name, "reason": f"{name} 模块", "priority": priority, "entry_points": [f"{name}/index.ts"]}
+        )
+
+    result = build_working_set(
+        {
+            "task": "跨模块验证",
+            "recall_level": "deep",
+            "recommended_docs": [],
+            "recommended_modules": recommended_modules,
+            "evidence_gaps": [],
+            "why_these": ["需要查看多个模块卡"],
+        },
+        tmp_path,
+        "plan.json",
+    )
+    assert result["verification_focus"] == ["回归价格计算", "核对边界条件"]
+
+
+def test_working_set_returns_empty_verification_focus_without_matches(tmp_path):
+    memory = tmp_path / ".memory"
+    (memory / "docs" / "architect").mkdir(parents=True)
+    (memory / "catalog" / "modules").mkdir(parents=True)
+    (memory / "docs" / "architect" / "decisions.md").write_text(
+        "## 决策\n\nUse recall-first.\n",
+        encoding="utf-8",
+    )
+
+    plan = {
+        "task": "理解架构",
+        "recall_level": "deep",
+        "recommended_docs": [
+            {"bucket": "architect", "file": "decisions.md", "reason": "架构", "priority": 1},
+        ],
+        "recommended_modules": [],
+        "evidence_gaps": [],
+        "why_these": ["只需读文档"],
+    }
+
+    result = build_working_set(plan, tmp_path, "plan.json")
+    assert result["verification_focus"] == []
+    assert result["primary_evidence_gap"] is None
 
 
 def test_working_set_requires_deep(project):

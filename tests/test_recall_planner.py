@@ -43,6 +43,7 @@ def test_decide_task_uses_brief_topics_and_module_cards(project):
     assert any("BRIEF 命中" in item["reason"] or "topics 命中" in item["reason"] for item in result["recommended_docs"])
     assert any("module card 命中" in item["reason"] for item in result["recommended_modules"])
     assert result["why_these"]
+    assert result["primary_evidence_gap"] is None
 
 
 def test_validate_task_prefers_qa_and_can_be_deep(project):
@@ -60,6 +61,8 @@ def test_search_first_when_no_match_does_not_force_light(project):
     assert result["search_queries"]
     assert result["search_hits"] == {"docs": [], "modules": []}
     assert result["recall_level"] == "deep"
+    assert result["primary_evidence_gap"] == result["evidence_gaps"][0]
+    assert result["primary_evidence_gap"] == "当前无法仅凭 BRIEF、topics、module cards 与搜索结果稳定定位目标对象。"
 
 
 def test_search_first_feeds_search_hits_back_into_final_sources(project):
