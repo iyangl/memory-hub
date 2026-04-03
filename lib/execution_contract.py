@@ -203,7 +203,7 @@ def build_execution_contract(working_set: dict, source_working_set: str) -> dict
 
     task = _require_string(working_set.get("task"), "task", allow_empty=False)
     source_plan = _require_string(working_set.get("source_plan"), "source_plan", allow_empty=False)
-    goal = _require_string(working_set.get("summary"), "summary", allow_empty=False)
+    goal = task
 
     return {
         "version": "1",

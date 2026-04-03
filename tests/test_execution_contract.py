@@ -75,7 +75,8 @@ def test_build_execution_contract_from_working_set(working_set_payload):
     assert result["task"] == working_set["task"]
     assert result["source_working_set"] == str(path)
     assert result["source_plan"] == ".memory/session/recall-plan.json"
-    assert result["goal"] == working_set["summary"]
+    assert result["goal"] == working_set["task"]
+    assert result["goal"] != working_set["summary"]
     assert result["primary_evidence_gap"] == "尚未确认 promotion 是否参与"
     assert result["required_evidence"] == ["尚未确认 promotion 是否参与"]
     assert result["success_criteria"] == ["解决 尚未确认 promotion 是否参与"]

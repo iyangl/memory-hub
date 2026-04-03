@@ -80,6 +80,9 @@ def test_recall_first_flow(tmp_path):
     assert code == 0
     assert result["data"]["output_file"] == str(contract_path)
     assert result["data"]["source_working_set"] == str(working_set_path)
+    assert result["data"]["goal"] == "重构 checkout 优惠券规则并验证风险"
+    written_contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    assert written_contract["goal"] == "重构 checkout 优惠券规则并验证风险"
     assert "known_context" in result["data"]
     assert "allowed_sources" in result["data"]
 
