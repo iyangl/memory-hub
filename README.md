@@ -118,6 +118,9 @@ memory-hub scan-modules [--out <file>]
 memory-hub recall-plan --task "<task>" [--out <file>]
 memory-hub working-set --plan-file <path> [--out <file>]
 memory-hub save --file <path>
+memory-hub inbox-list
+memory-hub inbox-clean [--before <ISO>]
+memory-hub modules-check
 ```
 
 ## Save Core 约束

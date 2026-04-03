@@ -22,6 +22,19 @@ def sanitize_module_name(name: str) -> str:
     return s or "unnamed"
 
 
+def find_module_name_collisions(names: list[str]) -> dict[str, list[str]]:
+    """Return sanitized-name collisions as {sanitized: [original names...]}"""
+    groups: dict[str, list[str]] = {}
+    for name in names:
+        sanitized = sanitize_module_name(name)
+        groups.setdefault(sanitized, []).append(name)
+    return {
+        sanitized: originals
+        for sanitized, originals in groups.items()
+        if len(originals) > 1
+    }
+
+
 def atomic_write(filepath: Path, content: str) -> None:
     """Write content atomically: write to .tmp then rename."""
     filepath.parent.mkdir(parents=True, exist_ok=True)

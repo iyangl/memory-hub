@@ -65,6 +65,7 @@ class TestCatalogUpdate:
                 "known_risks": ["容易只看入口忽略下游模块"],
                 "verification_focus": ["确认命令分发与输出 envelope 保持稳定"],
                 "related_memory": ["docs/architect/decisions.md"],
+                "structure_hash": "abcd1234",
                 "files": [
                     {"path": "lib/cli.py", "description": "CLI 入口"},
                     {"path": "lib/envelope.py", "description": "JSON envelope"},
@@ -84,6 +85,7 @@ class TestCatalogUpdate:
         assert "## 主要风险" in content
         assert "## 验证重点" in content
         assert "## 关联记忆" in content
+        assert "<!-- structure_hash: abcd1234 -->" in content
 
     def test_topics_uses_navigation_entry_style(self, initialized_project):
         modules_json = json.dumps({
@@ -121,6 +123,19 @@ class TestCatalogUpdate:
         assert code == 0
         assert "core" in result["data"]["modules_written"]
 
+    def test_rejects_module_name_collisions(self, initialized_project):
+        modules_json = json.dumps({
+            "modules": [
+                {"name": "packages/web", "files": []},
+                {"name": "packages-web", "files": []},
+            ]
+        })
+        json_file = initialized_project / "modules.json"
+        json_file.write_text(modules_json, encoding="utf-8")
+        result, code = run_cmd("lib.catalog_update", ["--file", str(json_file), "--project-root", str(initialized_project)])
+        assert code == 1
+        assert result["code"] == "MODULE_NAME_COLLISION"
+        assert "packages-web" in result["details"]["collisions"]
 
 class TestCatalogRepair:
     def test_detects_missing_registration(self, initialized_project):

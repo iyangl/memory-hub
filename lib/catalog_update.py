@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 
 from lib import envelope, paths
-from lib.utils import atomic_write, sanitize_module_name
+from lib.utils import atomic_write, find_module_name_collisions, sanitize_module_name
 
 TOPICS_CODE_HEADER = "## 代码模块"
 TOPICS_KNOWLEDGE_HEADER = "## 知识文件"
@@ -68,6 +68,10 @@ def _generate_module_md(module: dict) -> str:
 
     related_memory = module.get("related_memory", [])
     _append_list_section(lines, "## 关联记忆", [f"`{item}`" for item in related_memory])
+
+    structure_hash = module.get("structure_hash", "")
+    if structure_hash:
+        lines.append(f"\n<!-- structure_hash: {structure_hash} -->")
 
     lines.append("")
     return "\n".join(lines)
@@ -152,6 +156,17 @@ def run(args: list[str]) -> None:
         modules = []
     if not isinstance(modules, list):
         envelope.fail("INVALID_SCHEMA", "'modules' must be an array.")
+
+    collisions = find_module_name_collisions([
+        m.get("name", "") for m in modules
+        if isinstance(m, dict) and isinstance(m.get("name"), str)
+    ])
+    if collisions:
+        envelope.fail(
+            "MODULE_NAME_COLLISION",
+            "Multiple module names map to the same catalog filename.",
+            details={"collisions": collisions},
+        )
 
     modules_dir = paths.modules_path(project_root)
     modules_dir.mkdir(parents=True, exist_ok=True)

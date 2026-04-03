@@ -1,6 +1,7 @@
 """Tests for scan-modules command."""
 
 import json
+import subprocess
 import pytest
 from io import StringIO
 from pathlib import Path
@@ -99,10 +100,26 @@ class TestDiscoverModules:
         assert "known_risks" in lib_mod
         assert "verification_focus" in lib_mod
         assert "related_memory" in lib_mod
+        assert "structure_hash" in lib_mod
+        assert len(lib_mod["structure_hash"]) == 8
         assert lib_mod["summary"].startswith("基于 ")
         assert "`lib/__init__.py`" in lib_mod["summary"] or "`lib/core.py`" in lib_mod["summary"]
         assert any("`" in item for item in lib_mod["implicit_constraints"])
         assert any("入口文件" in item or "测试文件" in item or "目录名" in item for item in lib_mod["known_risks"])
+
+    def test_structure_hash_deterministic(self, python_project):
+        modules1 = _discover_modules(python_project)
+        modules2 = _discover_modules(python_project)
+        for m1, m2 in zip(modules1, modules2):
+            assert m1["structure_hash"] == m2["structure_hash"]
+
+    def test_structure_hash_changes_on_file_add(self, python_project):
+        modules_before = _discover_modules(python_project)
+        lib_before = next(m for m in modules_before if m["name"] == "lib")
+        (python_project / "lib" / "extra.py").write_text("# extra")
+        modules_after = _discover_modules(python_project)
+        lib_after = next(m for m in modules_after if m["name"] == "lib")
+        assert lib_before["structure_hash"] != lib_after["structure_hash"]
 
     def test_root_files(self, python_project):
         modules = _discover_modules(python_project)
@@ -134,3 +151,20 @@ class TestScan:
         saved = json.loads(out_file.read_text(encoding="utf-8"))
         assert saved["project_type"] == "python"
         assert result["data"]["output_file"] == str(out_file)
+
+    def test_scan_handles_non_ascii_git_paths(self, tmp_path):
+        subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test User"], cwd=tmp_path, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path, check=True, capture_output=True)
+
+        (tmp_path / "pyproject.toml").write_text("[project]\nname = 'demo'\n")
+        cn_dir = tmp_path / "模块"
+        cn_dir.mkdir()
+        (cn_dir / "入口.py").write_text("# entry")
+
+        subprocess.run(["git", "add", "pyproject.toml", "模块/入口.py"], cwd=tmp_path, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, check=True, capture_output=True)
+
+        result = scan(tmp_path)
+        names = [m["name"] for m in result["modules"]]
+        assert "模块" in names

@@ -7,6 +7,7 @@ Outputs JSON with recall-first navigation fields.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import locale
 import subprocess
@@ -84,21 +85,22 @@ def _detect_project_type(root: Path) -> str:
     return "unknown"
 
 
-def _get_tracked_files(root: Path) -> set[str] | None:
+def _get_tracked_files(root: Path, include_untracked: bool = False) -> set[str] | None:
     encoding = locale.getpreferredencoding(False) or "utf-8"
+    command = ["git", "-c", "core.quotePath=false", "ls-files", "-z"]
+    if include_untracked:
+        command.extend(["--others", "--exclude-standard", "--cached"])
     try:
         result = subprocess.run(
-            ["git", "ls-files"],
+            command,
             cwd=root,
             capture_output=True,
-            text=True,
-            encoding=encoding,
-            errors="replace",
             timeout=10,
         )
         if result.returncode != 0:
             return None
-        return {f for f in result.stdout.splitlines() if f}
+        output = result.stdout.decode(encoding, errors="replace")
+        return {f for f in output.split("\x00") if f}
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return None
 
@@ -284,6 +286,12 @@ def _guess_related_memory(name: str) -> list[str]:
     return refs
 
 
+def _compute_structure_hash(files: list[str]) -> str:
+    """SHA-256 prefix (8 hex chars) of the sorted file list."""
+    joined = "\n".join(sorted(files))
+    return hashlib.sha256(joined.encode("utf-8")).hexdigest()[:8]
+
+
 def _build_module(name: str, files: list[str], prefix: str) -> dict:
     notable_files = _pick_notable_files(files, prefix)
     entry_points = _guess_entry_points(notable_files)
@@ -292,6 +300,7 @@ def _build_module(name: str, files: list[str], prefix: str) -> dict:
         "name": name,
         "summary": summary,
         "total_files": len(files),
+        "structure_hash": _compute_structure_hash(files),
         "dir_tree": _build_dir_tree(files, prefix),
         "files": [{"path": f, "description": ""} for f in notable_files],
         "read_when": _guess_read_when(name, entry_points, notable_files),
@@ -304,8 +313,8 @@ def _build_module(name: str, files: list[str], prefix: str) -> dict:
     }
 
 
-def _discover_modules(root: Path) -> list[dict]:
-    tracked = _get_tracked_files(root)
+def _discover_modules(root: Path, include_untracked: bool = False) -> list[dict]:
+    tracked = _get_tracked_files(root, include_untracked=include_untracked)
     modules = []
 
     for item in sorted(root.iterdir()):
@@ -345,14 +354,14 @@ def _discover_modules(root: Path) -> list[dict]:
     return modules
 
 
-def scan(project_root: Path | None = None) -> dict:
+def scan(project_root: Path | None = None, include_untracked: bool = False) -> dict:
     root = project_root or Path.cwd()
     if not root.is_dir():
         return {"project_type": "unknown", "modules": []}
 
     return {
         "project_type": _detect_project_type(root),
-        "modules": _discover_modules(root),
+        "modules": _discover_modules(root, include_untracked=include_untracked),
     }
 
 

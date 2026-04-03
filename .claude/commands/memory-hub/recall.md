@@ -30,6 +30,19 @@ py -3 -m lib.cli brief
 
 注意：`brief` 只负责重建 `BRIEF.md`，不负责补齐整个 catalog；未初始化时必须先 `init`。
 
+### Step 1.5：检查 module cards 时效性（可选）
+
+```bash
+py -3 -m lib.cli modules-check
+```
+
+如果返回有 `stale`、`added` 或 `removed`，提示用户是否重新执行：
+
+```bash
+py -3 -m lib.cli scan-modules --out .memory/session/scan-modules.json
+py -3 -m lib.cli catalog-update --file .memory/session/scan-modules.json
+```
+
 ### Step 2：读取 base brief
 
 读取 `.memory/BRIEF.md`，将其作为 boot summary 注入上下文。

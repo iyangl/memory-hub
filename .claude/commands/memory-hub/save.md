@@ -127,6 +127,20 @@ py -3 -m lib.cli save --file .memory/session/save-request.json
 说明：
 - inbox 清理不是当前 `save` core 的职责；如需要清理，请单独确认并处理
 
+### Step 8：清理 inbox（可选）
+
+如果 save 成功且 inbox 中有文件，提示用户是否清理：
+
+```bash
+py -3 -m lib.cli inbox-list
+```
+
+如用户确认清理：
+
+```bash
+py -3 -m lib.cli inbox-clean
+```
+
 ---
 
 ## 边界

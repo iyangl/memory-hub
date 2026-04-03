@@ -20,6 +20,9 @@ COMMANDS = {
     "recall-plan": "lib.recall_planner",
     "working-set": "lib.session_working_set",
     "save": "lib.memory_save",
+    "inbox-list": "lib.inbox_list",
+    "inbox-clean": "lib.inbox_clean",
+    "modules-check": "lib.modules_check",
 }
 
 
