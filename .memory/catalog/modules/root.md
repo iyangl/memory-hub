@@ -30,3 +30,5 @@
 ## 关联记忆
 - `docs/architect/decisions.md`
 - `docs/dev/conventions.md`
+
+<!-- structure_hash: 50c86b7e -->

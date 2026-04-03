@@ -1,6 +1,6 @@
 # tests
 
-> 基于 11 个跟踪文件生成的模块导航，代表文件：`tests/__init__.py`、`tests/test_brief.py`。
+> 基于 18 个跟踪文件生成的模块导航，代表文件：`tests/__init__.py`、`tests/test_brief.py`。
 
 ## 何时阅读
 
@@ -16,7 +16,7 @@
 - `tests/test_brief.py`
 - `tests/test_catalog.py`
 - `tests/test_envelope.py`
-- `tests/test_memory_index.py`
+- `tests/test_execution_contract.py`
 
 ## 隐含约束
 - 先从 `tests/__init__.py`、`tests/test_brief.py` 定位模块边界，再决定是否继续下钻。
@@ -32,14 +32,20 @@
 - `tests/test_brief.py`
 - `tests/test_catalog.py`
 - `tests/test_envelope.py`
+- `tests/test_execution_contract.py`
+- `tests/test_inbox.py`
+- `tests/test_memory_flow.py`
 - `tests/test_memory_index.py`
 - `tests/test_memory_init.py`
 - `tests/test_memory_list_search.py`
 - `tests/test_memory_read.py`
+- `tests/test_memory_save.py`
+- `tests/test_modules_check.py`
 - `tests/test_paths.py`
-- `tests/test_scan_modules.py`
-- `tests/test_utils.py`
+- `tests/test_recall_planner.py`
 
 ## 关联记忆
 - `docs/architect/decisions.md`
 - `docs/qa/strategy.md`
+
+<!-- structure_hash: 274c0cd2 -->

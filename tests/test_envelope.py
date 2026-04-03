@@ -30,23 +30,23 @@ class TestOk:
         result, code = _capture_envelope(
             ok, {"x": 1},
             ai_actions=[{"type": "fix"}],
-            manual_actions=[{"type": "review"}],
+            manual_actions=[{"type": "confirm"}],
         )
         assert code == 0
         assert result["ai_actions"] == [{"type": "fix"}]
-        assert result["manual_actions"] == [{"type": "review"}]
+        assert result["manual_actions"] == [{"type": "confirm"}]
 
     def test_ok_with_custom_code_and_message(self):
         from lib.envelope import ok
         result, code = _capture_envelope(
             ok,
-            {"proposal_id": 1},
-            code="PROPOSAL_APPROVED",
-            message="Proposal approved.",
+            {"item_id": 1},
+            code="ACTION_COMPLETED",
+            message="Action completed.",
         )
         assert code == 0
-        assert result["code"] == "PROPOSAL_APPROVED"
-        assert result["message"] == "Proposal approved."
+        assert result["code"] == "ACTION_COMPLETED"
+        assert result["message"] == "Action completed."
 
     def test_ok_defaults(self):
         from lib.envelope import ok

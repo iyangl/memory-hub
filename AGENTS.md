@@ -4,7 +4,7 @@
 
 | Command | 触发方式 | 作用 |
 |---------|----------|------|
-| 初始化记忆 | 用户说“初始化记忆” / “init memory” | 建立 recall-first 骨架、基础 docs、catalog、`BRIEF.md` |
+| 初始化记忆 | 用户说“初始化记忆” / “init memory” | 建立 recall-first 骨架，并按初始化流程生成基础 docs、catalog、`BRIEF.md` |
 | 加载记忆 | 用户说“加载记忆” / “recall memory” | 读取 `BRIEF.md`，执行 `recall-plan`，按需进入 light/deep recall |
 | 保存记忆 | 用户说“保存记忆” / “save memory” | 提炼 durable knowledge，生成 `save-request`，调用 `save` core 并重建派生产物 |
 
@@ -15,7 +15,7 @@ Codex 没有 slash command，按 `.claude/commands/memory-hub/init.md`、`recall
 ### 初始化记忆
 
 - 若 `.memory/` 不存在，先运行 `py -3 -m lib.cli init`
-- 读取实际项目文件，补齐高价值 docs
+- 读取实际项目文件，补齐高价值 docs（这是初始化阶段允许直接落入 `.memory/docs/` 的例外路径）
 - 运行 `scan-modules --out ...` 生成模块导航脚手架
 - 运行 `catalog-update` / `catalog-repair` / `brief`，产出导航卡和 base brief
 
@@ -68,7 +68,7 @@ Codex 没有 slash command，按 `.claude/commands/memory-hub/init.md`、`recall
 
 ## 硬边界
 
-- 不直接编辑 `.memory/docs/`（由保存记忆流程和 `save` core 负责）
+- 不直接编辑 `.memory/docs/`（初始化记忆生成初始 docs 除外；其余长期知识由保存记忆流程和 `save` core 负责）
 - 不直接编辑 `.memory/catalog/`（由 CLI 负责）
 - 不直接编辑 `.memory/BRIEF.md`（由 `brief` 重建）
 - 不允许跳过 `Read Before Write`

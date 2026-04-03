@@ -4,7 +4,7 @@
 
 | Command | 触发 | 作用 |
 |---------|------|------|
-| `/memory-hub:init` | 首次接入项目，或 `.memory/` 尚不存在时 | 建立 recall-first 骨架、基础 docs、catalog、`BRIEF.md` |
+| `/memory-hub:init` | 首次接入项目，或 `.memory/` 尚不存在时 | 建立 recall-first 骨架，并按初始化流程生成基础 docs、catalog、`BRIEF.md` |
 | `/memory-hub:recall` | 会话开始时，或长会话中上下文变模糊时 | 读取 `BRIEF.md`，执行 `recall-plan`，按需进入 light/deep recall |
 | `/memory-hub:save` | 会话结束前 | 提炼 durable knowledge，生成 `save-request`，调用 `save` core 并重建派生产物 |
 
@@ -64,7 +64,7 @@
 
 ## 硬边界
 
-- 不直接编辑 `.memory/docs/`（由 `/memory-hub:save` 和 `memory-hub save --file <save.json>` 负责）
+- 不直接编辑 `.memory/docs/`（仅 `/memory-hub:init` 允许生成初始 docs；其余长期知识由 `/memory-hub:save` 和 `memory-hub save --file <save.json>` 负责）
 - 不直接编辑 `.memory/catalog/`（由 CLI 负责）
 - 不直接编辑 `.memory/BRIEF.md`（由 `brief` 生成）
 - `working-set` 不能原样写回 docs

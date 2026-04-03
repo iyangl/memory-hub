@@ -45,6 +45,8 @@ py -3 -m lib.cli init
 - `dev/conventions.md`
 - 必要时补充高价值决策 / 约束 / 验证策略
 
+说明：这是初始化阶段允许直接落入 `.memory/docs/` 的唯一场景；初始化后所有长期知识更新统一走 `/memory-hub:save`。
+
 目标不是做代码摘要，而是先沉淀：
 - 决策
 - 约束

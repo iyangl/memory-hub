@@ -62,7 +62,7 @@ memory-hub <command> [args]
 
 | Command | 平台 | 作用 |
 |---------|------|------|
-| `/memory-hub:init` | Claude Code slash command | 首次接入项目时建立 recall-first 骨架与基础派生产物 |
+| `/memory-hub:init` | Claude Code slash command | 首次接入项目时建立 recall-first 骨架，并按初始化流程生成基础 docs 与派生产物 |
 | `/memory-hub:recall` | Claude Code slash command | 读取 `BRIEF.md`，执行 `recall-plan`，按需进入 light/deep recall |
 | `/memory-hub:save` | Claude Code slash command | 提炼 durable knowledge，生成 `save-request`，调用 `save` core 并重建派生产物 |
 
@@ -72,7 +72,7 @@ memory-hub <command> [args]
 
 ## Recall-first 运行模型
 
-1. **首次接入**：运行 `init`，建立 `.memory/` 骨架、基础 docs、catalog、`BRIEF.md`；若 `.memory/` 已存在，`init` 会直接返回 `ALREADY_INITIALIZED`
+1. **首次接入**：运行 `init`，建立 `.memory/` 骨架，并按初始化流程生成基础 docs、catalog、`BRIEF.md`；若 `.memory/` 已存在，`init` 会直接返回 `ALREADY_INITIALIZED`
 2. **会话开始**：运行 `recall`，先读 base brief，再执行 `recall-plan`
 3. **Search Before Guess**：如果 planner 返回 `search_first = true`，先搜索和定位，再决定读哪些 docs / module cards
 4. **按需深入**：
@@ -141,7 +141,7 @@ memory-hub modules-check
 
 ## 硬边界
 
-- 不直接编辑 `.memory/docs/`，长期知识由 `save` 流程和 `memory-hub save --file <save.json>` 维护
+- 不直接编辑 `.memory/docs/`；只有初始化阶段允许 `/memory-hub:init` 生成初始 docs，其余长期知识由 `save` 流程和 `memory-hub save --file <save.json>` 维护
 - 不直接编辑 `.memory/catalog/`，导航索引由 CLI 维护
 - 不直接编辑 `.memory/BRIEF.md`，它始终由 `brief` 重建
 - `working-set` 只用于任务级 recall，不可原样回灌到 docs

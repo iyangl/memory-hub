@@ -1,6 +1,6 @@
 # lib
 
-> 基于 15 个跟踪文件生成的模块导航，代表文件：`lib/__init__.py`、`lib/brief.py`。
+> 基于 22 个跟踪文件生成的模块导航，代表文件：`lib/__init__.py`、`lib/brief.py`。
 
 ## 何时阅读
 
@@ -36,15 +36,17 @@
 - `lib/catalog_update.py`
 - `lib/cli.py`
 - `lib/envelope.py`
+- `lib/execution_contract.py`
+- `lib/inbox_clean.py`
+- `lib/inbox_list.py`
 - `lib/memory_index.py`
 - `lib/memory_init.py`
 - `lib/memory_list.py`
 - `lib/memory_read.py`
-- `lib/memory_search.py`
-- `lib/paths.py`
-- `lib/scan_modules.py`
-- `lib/utils.py`
+- `lib/memory_save.py`
 
 ## 关联记忆
 - `docs/architect/decisions.md`
 - `docs/dev/conventions.md`
+
+<!-- structure_hash: a5750035 -->

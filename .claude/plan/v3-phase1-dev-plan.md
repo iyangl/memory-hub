@@ -2,6 +2,7 @@
 
 > 基于 Phase 0 已收敛的全部决策，精确到文件和函数级别。
 > 前置条件：Phase 0 决策结果见 `.claude/plan/v3-deep-review.md`
+> 2026-04 清理注记：旧 repo-local skill / MCP / 自测入口已完成移除；现行入口以 `lib/cli.py` 与 `.claude/commands/memory-hub/*.md` 为准。
 
 ---
 
@@ -72,18 +73,15 @@ Step 8 (测试与验收)         ← 依赖全部
 | `test_session_extract.py` | session-extract 移除 |
 | `durable_test_support.py` | durable 辅助模块移除 |
 
-### 1.3 归档 skill
+### 1.3 归档旧 repo-local skill 目录
 
-将以下 skill 目录移入 `.archive/v2-skills/`：
-
-- `skills/project-memory/` — 被 3 个 command 替代
-- `skills/memory-admin/` — 维护操作改为 CLI 直接调用
+将旧 repo-local skill 目录移入 `.archive/v2-skills/`，不再作为当前协作入口。
 
 ### 1.4 清理 CLI 命令注册
 
 **文件**：`lib/cli.py`
 
-当前 COMMANDS 字典（12 条）精简为 7 条：
+早期 Phase 1 草案曾预估会大幅收缩命令面；现行命令面以 `lib/cli.py` 为准：
 
 ```python
 COMMANDS = {
@@ -95,21 +93,25 @@ COMMANDS = {
     "catalog-read": "lib.catalog_read",
     "catalog-update": "lib.catalog_update",
     "catalog-repair": "lib.catalog_repair",
-    "brief": "lib.brief",           # 新增（Step 3）
+    "brief": "lib.brief",
+    "scan-modules": "lib.scan_modules",
+    "recall-plan": "lib.recall_planner",
+    "working-set": "lib.session_working_set",
+    "execution-contract": "lib.execution_contract",
+    "save": "lib.memory_save",
+    "inbox-list": "lib.inbox_list",
+    "inbox-clean": "lib.inbox_clean",
+    "modules-check": "lib.modules_check",
 }
 ```
 
-移除：`discover`、`review`、`rollback`、`session-extract`
+旧的探索/审批/回退类入口已退出当前架构。
 
 ### 1.5 清理 pyproject.toml
 
 **文件**：`pyproject.toml`
 
-移除 MCP server 入口：
-```toml
-# 删除这行
-memory-hub-mcp = "lib.mcp_server:main"
-```
+移除旧 MCP console script 入口。
 
 ### 1.6 清理 .mcp.json
 
@@ -582,7 +584,7 @@ catalog-repair: `python3 -m lib.cli catalog-repair`
 | `lib/paths.py` | 2 | 新增 inbox/BRIEF 路径，移除 store 路径 |
 | `lib/memory_init.py` | 2 | 更新 MANIFEST，创建 inbox，移除 _store，生成 BRIEF |
 | `lib/cli.py` | 1 | 精简 COMMANDS 字典，新增 brief |
-| `pyproject.toml` | 1 | 移除 memory-hub-mcp 入口 |
+| `pyproject.toml` | 1 | 移除旧 MCP console script 入口 |
 | `.gitignore` | 2 | 添加 .memory/inbox/ |
 | `CLAUDE.md` | 7 | 重写为 ~50 行 |
 | `AGENTS.md` | 7 | 同步更新 |
@@ -596,8 +598,8 @@ catalog-repair: `python3 -m lib.cli catalog-repair`
 |------|------|------|
 | 25 个 lib/*.py 模块 | 1 | `.archive/v2-lib/` |
 | 8 个 tests/*.py 文件 | 1 | `.archive/v2-tests/` |
-| `skills/project-memory/` | 1 | `.archive/v2-skills/` |
-| `skills/memory-admin/` | 1 | `.archive/v2-skills/` |
+| 旧 repo-local 主 skill 目录 | 1 | `.archive/v2-skills/` |
+| 旧 repo-local 维护 skill 目录 | 1 | `.archive/v2-skills/` |
 | `.memory/_store/` | 2 | `.archive/v2-store/` |
 | `.mcp.json`（如存在） | 1 | `.archive/v2-config/` |
 

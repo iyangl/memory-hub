@@ -4,15 +4,7 @@
       "Bash(test:*)",
       "mcp__ace-tool__search_context",
       "Bash(python:*)",
-      "Bash(python -m lib.cli review:*)",
-      "Bash(python -m lib.cli rollback:*)",
-      "Bash(bin/selftest-phase1c:*)",
       "Bash(pip install:*)",
-      "mcp__memory-hub__search_memory",
-      "Bash(ln -sf /Users/sunpure/Documents/Code/memory-hub/skills/memory-admin ~/.claude/skills/memory-admin)",
-      "mcp__memory-hub__read_memory",
-      "mcp__memory-hub__capture_memory",
-      "mcp__memory-hub__show_memory_review",
       "mcp__sequential-thinking__sequentialthinking",
       "Bash(find:*)",
       "Bash(cd:*)",
@@ -35,8 +27,5 @@
       "Bash(C:/Users/LY/.claude/bin/codeagent-wrapper.exe --backend gemini --gemini-model gemini-3-pro-preview - \"E:/Development/Codes/memory-hub\" <<'EOF'\nROLE_FILE: C:/Users/LY/.claude/.ccg/prompts/gemini/reviewer.md\n<TASK>\n需求：审查 recall-first 重构是否背离初衷，判断当前代码是否符合设计契约，并给出按严重级别排序的问题清单。重点审查设计文件与实现的一致性，而不是只看代码风格。\n上下文：\n- 主设计：.claude/plan/recall-first-redesign-plan.md\n- 契约：.claude/plan/recall-first-contract.md\n- 检查清单：.claude/plan/recall-first-implementation-checklist.md\n- 关键实现：lib/recall_planner.py, lib/session_working_set.py, lib/scan_modules.py, lib/catalog_update.py, lib/brief.py, lib/memory_init.py, lib/cli.py\n- 命令模板：.claude/commands/memory-hub/init.md, recall.md, save.md\n- 现有派生产物：.memory/BRIEF.md, .memory/catalog/topics.md, .memory/catalog/modules/*.md\n请输出：\n1. 是否背离初衷（结论）\n2. 设计 vs 实现的关键偏差\n3. 代码层面的缺陷/风险\n4. 最值得先修的 3 个点\n5. 如果整体可接受，也要明确哪些地方已经对齐设计\n</TASK>\nOUTPUT: markdown review with Critical/Warning/Info sections and concrete file references\nEOF)"
     ]
   },
-  "enableAllProjectMcpServers": true,
-  "enabledMcpjsonServers": [
-    "memory-hub"
-  ]
+  "enableAllProjectMcpServers": true
 }

@@ -2,6 +2,7 @@
 
 **审查时间**: 2026-03-16
 **审查依据**: v3 方案摘要、已确认决策 C1/C2、现有 v2 代码库完整阅读
+**2026-04 清理注记**: 旧 repo-local skill / MCP / 自测入口已退出现行架构；当前协作入口以 `lib/cli.py` 与 `.claude/commands/memory-hub/*.md` 为准。
 
 ---
 
@@ -17,7 +18,7 @@
 | D6 | inbox 文件格式 | 纯 markdown，无 frontmatter。命名：{ISO时间戳}_{short-name}.md。一文件一条知识。/save 后删除 | 格式门槛越低 LLM 写入概率越高，Layer 2 是最佳努力 |
 | D7 | BRIEF.md 拼接规则 | 按 bucket 分组，每 doc 提取第一个 ## 标题+首段（截断 3 行），空文件跳过，总长度 ~200 行，超出则截断 2 行。/save 后自动重建 | 机械式确定性生成，不依赖 LLM |
 | D8a | slash command 载体 | .claude/commands/ | 与 CCG 一致，CC 原生支持，Codex 通过 AGENTS.md 引用 |
-| D8b | memory-admin skill | 移除，维护操作通过 CLI 直接调用 | v3 只保留 3 command，维护用 `python3 -m lib.cli catalog-repair` |
+| D8b | 旧 repo-local 维护 skill | 移除，维护操作通过 CLI 直接调用 | 当前协作入口以 `.claude/commands/` + `lib/cli.py` 为准 |
 
 ### D6 详细设计：inbox 机制
 
@@ -94,14 +95,14 @@
 ### 3. /save workflow 模板设计（含 inbox -> docs 合并、去重、catalog repair）
 
 - **状态**: 待讨论
-- **评估理由**: `/save` 是 v3 最复杂的 command，承担了 v2 中 `capture_memory + update_memory + docs_review + catalog-repair` 的全部写入职责。但其内部流程涉及多个设计决策点尚未收敛。
+- **评估理由**: `/save` 是 v3 最复杂的 command，承担了旧 proposal / review 写入链路与 `catalog-repair` 合流后的职责。但其内部流程涉及多个设计决策点尚未收敛。
 - **决策问题**:
   1. **inbox 合并策略**: `/save` 从 inbox 合并到 docs 时，是逐条人工确认，还是批量自动合并？如果自动合并，去重判断（W5）如何保证质量？
   2. **去重机制**: v2 依赖 MCP write guard + SQLite 做去重，v3 移除后去重完全依赖 LLM 搜索判断（W5）。这是否意味着 `/save` 必须是 LLM 驱动的（非纯 CLI）？如果是，离线执行（无 LLM）时怎么办？
   3. **冲突处理**: inbox 中多条记录指向同一 doc 时的合并策略。
   4. **原子性**: v2 有 SQLite 事务保证 approve 原子性。v3 文件操作的原子性如何保证？单个 `/save` 可能修改多个 docs 文件 + catalog，中间失败如何回滚？
   5. **catalog-repair 内化还是外部调用**: `/save` 完成后是否自动触发 catalog-repair？还是 catalog 更新已经内化到 `/save` 流程中？
-  6. **审查环节是否保留**: v2 有 proposal -> review -> approve 三步。v3 的 `/save` 是直接落盘还是需要用户确认？如果直接落盘，"后悔测试"的安全网只剩 git，这是否可接受（I3）？
+  6. **人工确认环节是否保留**: 旧架构有 proposal -> review -> approve 三步。v3 的 `/save` 是直接落盘还是需要用户确认？如果直接落盘，"后悔测试"的安全网只剩 git，这是否可接受（I3）？
   7. **新增 doc 的 bucket 分类**: `/save` 时需要判断知识属于 architect/dev/pm/qa（W2 四类可能不够用）。这个判断由谁做？
 
 ### 4. inbox 机制详细设计
@@ -145,7 +146,7 @@
 ### 7. CLAUDE.md 精简设计
 
 - **状态**: 就绪
-- **评估理由**: 方向明确 -- 从当前 ~300 行的复杂流程规则精简为 3 command 的简单路由。当前 CLAUDE.md 的主要复杂度来自 durable branch、review 流程、MCP 约束、写入路由，这些在 v3 中全部移除。精简后的 CLAUDE.md 只需要定义：(1) `/init`、`/recall`、`/save` 三个 command 的入口；(2) Layer 2 自主写入 inbox 的行为规范；(3) 硬边界（不直接编辑 docs、不绕过 inbox 等）。
+- **评估理由**: 方向明确 -- 从当前 ~300 行的复杂流程规则精简为 3 command 的简单路由。当前 CLAUDE.md 的主要复杂度来自 durable branch、旧人工审批链路、MCP 约束、写入路由，这些在 v3 中全部移除。精简后的 CLAUDE.md 只需要定义：(1) `/init`、`/recall`、`/save` 三个 command 的入口；(2) Layer 2 自主写入 inbox 的行为规范；(3) 硬边界（不直接编辑 docs、不绕过 inbox 等）。
 - **备注**: 具体内容取决于 Layer 2 行为规范（环节 6）的定义结果。CLAUDE.md 的精简本身不是瓶颈。
 
 ### 8. 代码精简与归档策略
@@ -155,7 +156,7 @@
 - **需要补充的具体问题**:
   1. **归档方式**: 移入 `.archive/v2/` 目录？直接删除（依赖 git history）？保留但标记 deprecated？
   2. **保留模块的改造**: `paths.py` 需要新增 `inbox/` 和 `BRIEF.md` 的路径定义；需要移除 `_store/`、`projections/` 相关路径。`cli.py` 的 COMMANDS 字典需要大幅精简。`envelope.py` 是否仍然需要？v3 的 3 个 command 是否仍走 JSON envelope 输出？
-  3. **MCP server 的处理**: `mcp_server.py` 和 `mcp_toolspecs.py` 确认移除。`durable_mcp_tools.py` 确认移除。但需要确认 `memory-hub-mcp` 这个 pyproject.toml 入口也一并移除。
+  3. **MCP server 的处理**: `mcp_server.py` 和 `mcp_toolspecs.py` 确认移除。`durable_mcp_tools.py` 确认移除。旧 MCP console script 入口也应同步移除。
   4. **pyproject.toml 更新**: scripts 入口需要同步更新。
   5. **tests/ 的处理策略**: 现有测试哪些保留、哪些归档，需要和保留模块一一对应。
 
@@ -174,12 +175,12 @@
 ### 10. skill 目录结构调整
 
 - **状态**: 待讨论
-- **评估理由**: 从 `project-memory`/`memory-admin` 两个 skill 转向 3 个 slash command，涉及 skill 目录的完全重组。但 slash command 在 Claude Code 中的实现机制（是否仍是 `skills/` 目录下的 SKILL.md）需要确认。
+- **评估理由**: 现行实现已经从旧 repo-local skill 入口收敛到 `.claude/commands/` 与 `lib/cli.py`。本节更适合作为历史收口说明，而不是继续把 skill 目录当作待定主路径。
 - **决策问题**:
-  1. **slash command 的实现载体**: Claude Code 的 `/command` 是通过 `.claude/commands/` 目录实现的，而非 `skills/` 目录。Codex 的 slash command 机制可能不同。v3 需要在两个平台上都支持，载体选什么？
-  2. **是否保留 skill 目录**: 如果 `/init`、`/recall`、`/save` 走 `.claude/commands/`，那 `skills/` 目录是否完全废弃？
-  3. **`memory-admin` 是否保留**: v3 方案只提到 3 个 command，但 catalog-repair 等维护操作仍然需要入口。是否需要第 4 个 command 或保留 memory-admin skill？
-  4. **Codex 兼容性**: Codex 是否支持 slash command？如果不支持，Codex 上如何触发 `/init`、`/recall`、`/save`？
+  1. **slash command 的实现载体**: Claude Code 的 `/command` 已通过 `.claude/commands/` 落地；如需兼容其他代理，应明确它们只消费同一套文档与 CLI，而不是恢复旧 skill 目录。
+  2. **skill 目录边界**: repo-local 旧 skill 已退出当前架构；若未来引入新的 skill，应明确其只是辅助工具链，不是 memory-hub 主入口。
+  3. **维护入口**: `catalog-repair` 等维护操作继续走 CLI，不再恢复单独维护 skill。
+  4. **跨代理兼容性**: 兼容层应围绕现有 command + CLI 设计，而不是围绕旧 skill/MCP 入口做兼容。
 
 ### 11. CLI 命令调整
 
@@ -188,7 +189,7 @@
 - **需要补充的具体问题**:
   1. **v3 CLI 的最终命令列表**: 是否仍需要 `memory-hub init`、`memory-hub catalog-repair`？是否新增 `memory-hub brief`（生成 BRIEF.md）、`memory-hub save`（inbox 合并）？
   2. **CLI 与 slash command 的关系**: `/init` 调用 `memory-hub init` 吗？还是 `/init` 完全是 skill/prompt 驱动，不调用 CLI？
-  3. **移除命令确认**: `review`、`rollback`、`session-extract`、`discover`、`catalog-update`、`list`、`index` -- 这些全部移除？`search`、`read` 是否保留为内部工具？
+  3. **命令面收敛确认**: 旧审批/回退/发现类入口已退出；现行命令面以 `lib/cli.py` 为准，重点是确认哪些命令保留为当前 workflow 的内部能力。
   4. **JSON envelope 是否保留**: v3 的 CLI 是否仍然输出 JSON envelope？如果 CLI 只是 slash command 的内部工具，是否可以改为更简单的输出格式？
 
 ### 12. 测试策略
@@ -199,7 +200,7 @@
   1. **保留测试**: `tests/test_paths.py`、`tests/test_envelope.py`、`tests/test_catalog_repair.py`、`tests/test_memory_init.py`、`tests/test_memory_read.py`、`tests/test_memory_search.py` -- 这些是否全部保留？需要哪些修改？
   2. **新增测试**: BRIEF.md 机械拼接逻辑需要测试。inbox 文件创建/读取需要测试。`/save` 的 inbox->docs 合并逻辑需要测试（如果有 CLI 部分）。
   3. **归档测试**: 所有 `test_durable_*`、`test_mcp_*`、`test_project_review_*`、`test_docs_review_*` -- 确认归档。
-  4. **端到端测试**: v2 有 `bin/selftest-phase1c`。v3 需要等价的端到端验证吗？
+  4. **端到端测试**: 旧 MCP 自测脚本已退出。v3 需要什么样的现行入口验收脚本，仍需单独定义。
   5. **行为测试**: Layer 2 的 LLM 自主写入行为无法用传统测试覆盖。是否需要定义验收场景？
 
 ### 13. Disclosure 标签的取舍
@@ -228,9 +229,9 @@
 
 v3 方案称 `/save` 是 Layer 3（确定性），但 `/save` 的核心逻辑 -- inbox 去重、知识分类、docs 合并 -- 几乎都需要 LLM 判断。这与"确定性"标签矛盾。建议重新定义：`/save` 是"用户显式触发的确定性入口"（触发时机确定），但合并执行过程可以是"LLM 辅助的最佳努力"。
 
-### 冲突 2: 移除 review 机制 vs 安全网
+### 冲突 2: 移除人工审批链路 vs 安全网
 
-v2 的 proposal -> review -> approve 三步为知识写入提供了人工审查安全网。v3 移除后，`/save` 直接落盘到 docs，安全网只剩 git（I3）。但 git 作为安全网要求：(1) inbox 和 docs 都被 git 跟踪；(2) 用户有 git 使用意识；(3) `/save` 前自动 commit 或有明确提示。这些前提都需要明确。
+旧架构的 proposal -> review -> approve 三步为知识写入提供了人工审查安全网。v3 移除后，`/save` 直接落盘到 docs，安全网只剩 git（I3）。但 git 作为安全网要求：(1) inbox 和 docs 都被 git 跟踪；(2) 用户有 git 使用意识；(3) `/save` 前自动 commit 或有明确提示。这些前提都需要明确。
 
 ### 冲突 3: BRIEF.md "派生产物" vs "唯一数据源"
 
@@ -314,7 +315,7 @@ Phase 3 (验证)
 2. 清理 `cli.py` 的 COMMANDS 字典
 3. 清理 `pyproject.toml` 的 scripts 入口
 4. 归档对应的测试文件
-5. 删除 `bin/selftest-phase1c`
+5. 删除旧 MCP 自测入口脚本
 
 **第三步: 数据迁移 + 基础设施 (Phase 1b)** -- 预估 2 任务点
 
