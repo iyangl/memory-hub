@@ -6,6 +6,7 @@ from io import StringIO
 import sys
 
 from lib import paths
+from lib.scan_modules import MODULE_CARD_GENERATOR_VERSION
 
 
 @pytest.fixture
@@ -85,6 +86,7 @@ class TestCatalogUpdate:
         assert "## 主要风险" in content
         assert "## 验证重点" in content
         assert "## 关联记忆" in content
+        assert f"<!-- generator_version: {MODULE_CARD_GENERATOR_VERSION} -->" in content
         assert "<!-- structure_hash: abcd1234 -->" in content
 
     def test_topics_uses_navigation_entry_style(self, initialized_project):
@@ -123,6 +125,27 @@ class TestCatalogUpdate:
         assert code == 0
         assert "core" in result["data"]["modules_written"]
 
+    def test_rewrites_generator_version_to_current(self, initialized_project):
+        modules_json = json.dumps({
+            "modules": [{
+                "name": "core",
+                "summary": "核心模块",
+                "generator_version": "1",
+                "structure_hash": "abcd1234",
+                "entry_points": ["lib/cli.py"],
+                "files": [{"path": "lib/cli.py", "description": "CLI 入口"}]
+            }]
+        })
+        json_file = initialized_project / "modules.json"
+        json_file.write_text(modules_json, encoding="utf-8")
+        result, code = run_cmd("lib.catalog_update", ["--file", str(json_file), "--project-root", str(initialized_project)])
+        assert code == 0
+
+        module_file = initialized_project / ".memory" / "catalog" / "modules" / "core.md"
+        content = module_file.read_text(encoding="utf-8")
+        assert f"<!-- generator_version: {MODULE_CARD_GENERATOR_VERSION} -->" in content
+        assert "<!-- generator_version: 1 -->" not in content
+
     def test_rejects_module_name_collisions(self, initialized_project):
         modules_json = json.dumps({
             "modules": [
@@ -137,6 +160,7 @@ class TestCatalogUpdate:
         assert result["code"] == "MODULE_NAME_COLLISION"
         assert "packages-web" in result["details"]["collisions"]
 
+
 class TestCatalogRepair:
     def test_detects_missing_registration(self, initialized_project):
         result, code = run_cmd("lib.catalog_repair", ["--project-root", str(initialized_project)])
@@ -146,7 +170,10 @@ class TestCatalogRepair:
 
     def test_refreshes_stale_registered_summary(self, initialized_project):
         pm_doc = initialized_project / ".memory" / "docs" / "pm" / "decisions.md"
-        pm_doc.write_text("## Checkout 优惠券规则\n\n- 先计算折扣再做上限校验\n", encoding="utf-8")
+        pm_doc.write_text(
+            "## Checkout 优惠券规则\n\n- 先计算折扣再做上限校验\n\n## 风险\n\n- 金额链路容易失真\n",
+            encoding="utf-8",
+        )
         topics = initialized_project / ".memory" / "catalog" / "topics.md"
         topics.write_text(
             "# Topics\n\n## 代码模块\n\n## 知识文件\n### pm-decisions\n- docs/pm/decisions.md — 旧摘要\n",
@@ -160,7 +187,7 @@ class TestCatalogRepair:
         assert refreshed[0]["file_ref"] == "docs/pm/decisions.md"
 
         updated_topics = topics.read_text(encoding="utf-8")
-        assert "docs/pm/decisions.md — Checkout 优惠券规则：先计算折扣再做上限校验" in updated_topics
+        assert "docs/pm/decisions.md — Checkout 优惠券规则：先计算折扣再做上限校验；风险：金额链路容易失真" in updated_topics
 
     def test_keeps_valid_action_aware_summary(self, initialized_project):
         pm_doc = initialized_project / ".memory" / "docs" / "pm" / "decisions.md"
@@ -178,3 +205,25 @@ class TestCatalogRepair:
 
         updated_topics = topics.read_text(encoding="utf-8")
         assert "docs/pm/decisions.md — Checkout 优惠券规则：先计算折扣再做上限校验" in updated_topics
+
+    def test_refreshes_title_only_summary_to_richer_canonical_summary(self, initialized_project):
+        pm_doc = initialized_project / ".memory" / "docs" / "pm" / "decisions.md"
+        pm_doc.write_text(
+            "# 缓存策略\n\n## 决策\n\n- 使用本地文件缓存\n\n## 风险\n\n- 金额链路容易失真\n",
+            encoding="utf-8",
+        )
+        topics = initialized_project / ".memory" / "catalog" / "topics.md"
+        topics.write_text(
+            "# Topics\n\n## 代码模块\n\n## 知识文件\n### pm-decisions\n- docs/pm/decisions.md — 缓存策略\n",
+            encoding="utf-8",
+        )
+
+        result, code = run_cmd("lib.catalog_repair", ["--project-root", str(initialized_project)])
+        assert code == 0
+        refreshed = [item for item in result["data"]["fixed"] if item["type"] == "stale_summary_refreshed"]
+        assert len(refreshed) == 1
+        assert refreshed[0]["old_summary"] == "缓存策略"
+        assert refreshed[0]["new_summary"] == "决策：使用本地文件缓存；风险：金额链路容易失真"
+
+        updated_topics = topics.read_text(encoding="utf-8")
+        assert "docs/pm/decisions.md — 决策：使用本地文件缓存；风险：金额链路容易失真" in updated_topics

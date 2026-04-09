@@ -11,9 +11,11 @@ import json
 from pathlib import Path
 
 from lib import envelope, paths
-from lib.session_working_set import DURABLE_CANDIDATE_PLACEHOLDER
+from lib.session_working_set import DURABLE_CANDIDATE_PLACEHOLDER, MAX_FACETS_PER_FIELD, WORKING_SET_VERSION
 from lib.utils import atomic_write, sanitize_module_name
 
+EXECUTION_CONTRACT_VERSION = "2"
+LEGACY_WORKING_SET_VERSION = "1"
 REQUIRED_WORKING_SET_FIELDS = (
     "version",
     "task",
@@ -24,6 +26,9 @@ REQUIRED_WORKING_SET_FIELDS = (
     "primary_evidence_gap",
     "verification_focus",
     "durable_candidates",
+    "decision_points",
+    "constraints",
+    "risks",
 )
 
 DISALLOWED_BEHAVIORS = [
@@ -33,11 +38,11 @@ DISALLOWED_BEHAVIORS = [
     "不要把 working-set、execution-contract 等 session artifact 原样写回 durable docs。",
     "durable 写回必须通过 memory-hub save --file <save.json>，不要绕过 save correctness core。",
 ]
+FACET_FIELDS = ("decision_points", "constraints", "risks", "verification_focus")
 
 
 def _normalize_text(value: str) -> str:
     return " ".join(value.split()).strip()
-
 
 
 def _dedupe_texts(values: list[str]) -> list[str]:
@@ -54,91 +59,22 @@ def _dedupe_texts(values: list[str]) -> list[str]:
     return result
 
 
-
 def _fail_invalid_working_set(message: str, *, details: dict | None = None) -> None:
     envelope.fail("INVALID_WORKING_SET", message, details=details)
 
 
-
 def _require_string(value: object, field: str, *, allow_empty: bool = True) -> str:
     if not isinstance(value, str):
-        _fail_invalid_working_set(
-            "Working set fields must match the expected types.",
-            details={"field": field},
-        )
+        _fail_invalid_working_set("Working set fields must match the expected types.", details={"field": field})
     normalized = _normalize_text(value)
     if not allow_empty and not normalized:
-        _fail_invalid_working_set(
-            "Working set fields must not be empty.",
-            details={"field": field},
-        )
+        _fail_invalid_working_set("Working set fields must not be empty.", details={"field": field})
     return normalized
-
-
-
-def _validate_working_set(working_set: dict) -> None:
-    if not isinstance(working_set, dict):
-        _fail_invalid_working_set("Working set must be a JSON object.")
-
-    missing_fields = [field for field in REQUIRED_WORKING_SET_FIELDS if field not in working_set]
-    if missing_fields:
-        _fail_invalid_working_set(
-            "Working set is missing required fields.",
-            details={"missing_fields": missing_fields},
-        )
-
-    _require_string(working_set.get("version"), "version", allow_empty=False)
-    _require_string(working_set.get("task"), "task", allow_empty=False)
-    _require_string(working_set.get("source_plan"), "source_plan", allow_empty=False)
-    _require_string(working_set.get("summary"), "summary", allow_empty=False)
-
-    list_fields = ("items", "priority_reads", "verification_focus", "durable_candidates")
-    invalid_list_fields = [field for field in list_fields if not isinstance(working_set.get(field), list)]
-    if invalid_list_fields:
-        _fail_invalid_working_set(
-            "Working set fields must match the expected types.",
-            details={"invalid_list_fields": invalid_list_fields},
-        )
-
-    for index, item in enumerate(working_set["items"]):
-        if not isinstance(item, dict):
-            _fail_invalid_working_set(
-                "Working set item must be a JSON object.",
-                details={"field": f"items[{index}]"},
-            )
-        _require_string(item.get("summary"), f"items[{index}].summary")
-        _require_string(item.get("selected_because"), f"items[{index}].selected_because")
-        sources = item.get("sources")
-        if not isinstance(sources, list):
-            _fail_invalid_working_set(
-                "Working set item sources must be a list.",
-                details={"field": f"items[{index}].sources"},
-            )
-        for source_index, source in enumerate(sources):
-            _validate_source(source, f"items[{index}].sources[{source_index}]", allow_missing_reason=True)
-
-    for index, source in enumerate(working_set["priority_reads"]):
-        _validate_source(source, f"priority_reads[{index}]", allow_missing_reason=False)
-
-    for index, value in enumerate(working_set["verification_focus"]):
-        _require_string(value, f"verification_focus[{index}]", allow_empty=False)
-
-    for index, value in enumerate(working_set["durable_candidates"]):
-        _require_string(value, f"durable_candidates[{index}]", allow_empty=False)
-
-
-
-def _build_known_context(items: list[dict]) -> list[str]:
-    return _dedupe_texts([_require_string(item.get("summary"), "items[].summary") for item in items])
-
 
 
 def _validate_source(source: object, field: str, *, allow_missing_reason: bool) -> None:
     if not isinstance(source, dict):
-        _fail_invalid_working_set(
-            "Working set source must be a JSON object.",
-            details={"field": field},
-        )
+        _fail_invalid_working_set("Working set source must be a JSON object.", details={"field": field})
     _require_string(source.get("type"), f"{field}.type", allow_empty=False)
     _require_string(source.get("path"), f"{field}.path", allow_empty=False)
     reason = source.get("reason")
@@ -146,6 +82,73 @@ def _validate_source(source: object, field: str, *, allow_missing_reason: bool) 
         return
     _require_string(reason, f"{field}.reason", allow_empty=False)
 
+
+def _validate_string_list(working_set: dict, field: str) -> None:
+    values = working_set.get(field)
+    if not isinstance(values, list):
+        _fail_invalid_working_set("Working set fields must match the expected types.", details={"invalid_list_fields": [field]})
+    for index, value in enumerate(values):
+        _require_string(value, f"{field}[{index}]", allow_empty=False)
+
+
+def _normalize_legacy_working_set(working_set: dict) -> dict:
+    normalized = dict(working_set)
+    version = normalized.get("version")
+    if version != LEGACY_WORKING_SET_VERSION:
+        return normalized
+    for field in FACET_FIELDS:
+        normalized.setdefault(field, [])
+    normalized["version"] = WORKING_SET_VERSION
+    return normalized
+
+
+def _validate_working_set(working_set: dict) -> dict:
+    if not isinstance(working_set, dict):
+        _fail_invalid_working_set("Working set must be a JSON object.")
+
+    normalized_working_set = _normalize_legacy_working_set(working_set)
+    missing_fields = [field for field in REQUIRED_WORKING_SET_FIELDS if field not in normalized_working_set]
+    if missing_fields:
+        _fail_invalid_working_set("Working set is missing required fields.", details={"missing_fields": missing_fields})
+
+    version = _require_string(normalized_working_set.get("version"), "version", allow_empty=False)
+    if version != WORKING_SET_VERSION:
+        _fail_invalid_working_set(
+            "Working set version is not supported.",
+            details={"version": version, "supported_version": WORKING_SET_VERSION},
+        )
+
+    _require_string(normalized_working_set.get("task"), "task", allow_empty=False)
+    _require_string(normalized_working_set.get("source_plan"), "source_plan", allow_empty=False)
+    _require_string(normalized_working_set.get("summary"), "summary", allow_empty=False)
+
+    list_fields = ("items", "priority_reads", "durable_candidates", *FACET_FIELDS)
+    invalid_list_fields = [field for field in list_fields if not isinstance(normalized_working_set.get(field), list)]
+    if invalid_list_fields:
+        _fail_invalid_working_set("Working set fields must match the expected types.", details={"invalid_list_fields": invalid_list_fields})
+
+    for index, item in enumerate(normalized_working_set["items"]):
+        if not isinstance(item, dict):
+            _fail_invalid_working_set("Working set item must be a JSON object.", details={"field": f"items[{index}]"})
+        _require_string(item.get("summary"), f"items[{index}].summary")
+        _require_string(item.get("selected_because"), f"items[{index}].selected_because")
+        sources = item.get("sources")
+        if not isinstance(sources, list):
+            _fail_invalid_working_set("Working set item sources must be a list.", details={"field": f"items[{index}].sources"})
+        for source_index, source in enumerate(sources):
+            _validate_source(source, f"items[{index}].sources[{source_index}]", allow_missing_reason=True)
+
+    for index, source in enumerate(normalized_working_set["priority_reads"]):
+        _validate_source(source, f"priority_reads[{index}]", allow_missing_reason=False)
+
+    for field in FACET_FIELDS:
+        _validate_string_list(normalized_working_set, field)
+    _validate_string_list(normalized_working_set, "durable_candidates")
+    return normalized_working_set
+
+
+def _build_known_context(items: list[dict]) -> list[str]:
+    return _dedupe_texts([_require_string(item.get("summary"), "items[].summary") for item in items])
 
 
 def _append_allowed_source(allowed_sources: list[dict], seen: set[tuple[str, str]], source: dict, fallback_reason: str) -> None:
@@ -157,61 +160,61 @@ def _append_allowed_source(allowed_sources: list[dict], seen: set[tuple[str, str
     if key in seen:
         return
     seen.add(key)
-    allowed_sources.append({
-        "type": source_type,
-        "path": path,
-        "reason": reason,
-    })
-
+    allowed_sources.append({"type": source_type, "path": path, "reason": reason})
 
 
 def _build_allowed_sources(working_set: dict) -> list[dict]:
     allowed_sources: list[dict] = []
     seen: set[tuple[str, str]] = set()
-
     for source in working_set.get("priority_reads", []):
         _append_allowed_source(allowed_sources, seen, source, "priority read")
-
     for item in working_set.get("items", []):
         fallback_reason = _require_string(item.get("selected_because"), "items[].selected_because", allow_empty=False)
         for source in item.get("sources", []):
             _append_allowed_source(allowed_sources, seen, source, fallback_reason)
-
     return allowed_sources
 
 
+def _facet_values(working_set: dict, field: str, *, limit: int | None = MAX_FACETS_PER_FIELD) -> list[str]:
+    values = _dedupe_texts([
+        _require_string(value, f"{field}[]", allow_empty=False)
+        for value in working_set.get(field, [])
+    ])
+    if limit is None:
+        return values
+    return values[:limit]
+
 
 def build_execution_contract(working_set: dict, source_working_set: str) -> dict:
-    _validate_working_set(working_set)
+    working_set = _validate_working_set(working_set)
 
     primary_evidence_gap = working_set.get("primary_evidence_gap")
     if primary_evidence_gap is not None:
         primary_evidence_gap = _require_string(primary_evidence_gap, "primary_evidence_gap", allow_empty=False)
 
-    verification_focus = _dedupe_texts([
-        _require_string(value, "verification_focus[]", allow_empty=False)
-        for value in working_set.get("verification_focus", [])
-    ])
+    decision_points = _facet_values(working_set, "decision_points")
+    constraints = _facet_values(working_set, "constraints")
+    risks = _facet_values(working_set, "risks")
+    verification_focus = _facet_values(working_set, "verification_focus")
     durable_candidates = [
         candidate
-        for candidate in (
-            _require_string(value, "durable_candidates[]", allow_empty=False)
-            for value in working_set.get("durable_candidates", [])
-        )
+        for candidate in _facet_values(working_set, "durable_candidates")
         if candidate != DURABLE_CANDIDATE_PLACEHOLDER
     ]
 
     task = _require_string(working_set.get("task"), "task", allow_empty=False)
     source_plan = _require_string(working_set.get("source_plan"), "source_plan", allow_empty=False)
-    goal = task
 
     return {
-        "version": "1",
+        "version": EXECUTION_CONTRACT_VERSION,
         "task": task,
         "source_working_set": source_working_set,
         "source_plan": source_plan,
-        "goal": goal,
+        "goal": task,
         "known_context": _build_known_context(working_set.get("items", [])),
+        "decision_points": decision_points,
+        "constraints": constraints,
+        "risks": risks,
         "primary_evidence_gap": primary_evidence_gap,
         "allowed_sources": _build_allowed_sources(working_set),
         "disallowed_behaviors": list(DISALLOWED_BEHAVIORS),
@@ -222,7 +225,6 @@ def build_execution_contract(working_set: dict, source_working_set: str) -> dict
     }
 
 
-
 def _default_output_path(working_set: dict, project_root: Path | None) -> Path:
     task = _require_string(working_set.get("task"), "task", allow_empty=False)
     slug = sanitize_module_name(task[:80])
@@ -230,7 +232,6 @@ def _default_output_path(working_set: dict, project_root: Path | None) -> Path:
         task_hash = hashlib.sha1(task.encode("utf-8")).hexdigest()[:8]
         slug = f"execution-contract-{task_hash}"
     return paths.session_file_path(f"{slug}-execution-contract", project_root=project_root)
-
 
 
 def run(args: list[str]) -> None:
@@ -255,7 +256,7 @@ def run(args: list[str]) -> None:
     if parsed.out:
         out_path = Path(parsed.out)
     else:
-        out_path = _default_output_path(working_set, project_root)
+        out_path = _default_output_path(result, project_root)
     atomic_write(out_path, json.dumps(result, ensure_ascii=False, indent=2) + "\n")
 
     payload = dict(result)

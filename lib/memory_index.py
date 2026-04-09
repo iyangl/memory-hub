@@ -15,17 +15,27 @@ from pathlib import Path
 
 from lib import envelope, paths
 from lib.brief import _extract_best_section
-from lib.utils import atomic_write
+from lib.utils import (
+    COMMON_FACET_KEYWORDS,
+    COMMON_FACET_ORDER_BY_BUCKET,
+    COMMON_GENERIC_SECTION_HEADINGS,
+    atomic_write,
+)
 
 TOPICS_KNOWLEDGE_HEADER = "## 知识文件"
+FACET_KEYWORDS = COMMON_FACET_KEYWORDS
+FACET_ORDER_BY_BUCKET = COMMON_FACET_ORDER_BY_BUCKET
+GENERIC_SECTION_HEADINGS = COMMON_GENERIC_SECTION_HEADINGS
 
 
 def _normalize_summary_line(line: str) -> str:
     return re.sub(r"\s+", " ", line).strip().lstrip("- ").strip()
 
 
+
 def _normalize_summary_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
+
 
 
 def _extract_h1_title(content: str) -> str:
@@ -36,42 +46,203 @@ def _extract_h1_title(content: str) -> str:
     return ""
 
 
-def _extract_h2_sections(content: str) -> list[str]:
-    sections: list[str] = []
-    current: list[str] = []
+
+def _parse_h2_sections(content: str) -> list[tuple[str, list[str]]]:
+    sections: list[tuple[str, list[str]]] = []
+    current_heading: str | None = None
+    current_body: list[str] = []
+
+    def flush() -> None:
+        nonlocal current_heading, current_body
+        if current_heading is None:
+            return
+        sections.append((current_heading, current_body))
+        current_heading = None
+        current_body = []
+
     for line in content.splitlines():
-        if line.startswith("## "):
-            if current:
-                sections.append("\n".join(current).rstrip())
-            current = [line.rstrip()]
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            flush()
+            current_heading = _normalize_summary_line(stripped[3:])
             continue
-        if current:
-            current.append(line.rstrip())
-    if current:
-        sections.append("\n".join(current).rstrip())
+        if current_heading is None or not stripped:
+            continue
+        current_body.append(_normalize_summary_line(stripped))
+
+    flush()
     return sections
 
 
-def summarize_markdown(bucket: str, content: str, fallback: str = "") -> str:
-    best = _extract_best_section(content, bucket, max_lines=2).strip()
-    lines = [_normalize_summary_line(line) for line in best.splitlines() if line.strip()]
-    if not lines:
-        return fallback or ""
+
+def _summarize_lines(lines: list[str]) -> str:
+    normalized = [_normalize_summary_line(line) for line in lines if line.strip()]
+    if not normalized:
+        return ""
 
     heading = ""
     body: list[str] = []
-    if lines[0].startswith("## "):
-        heading = lines[0][3:].strip()
-        body = lines[1:]
+    if normalized[0].startswith("## "):
+        heading = normalized[0][3:].strip()
+        body = normalized[1:]
     else:
-        body = lines[:]
+        body = normalized[:]
 
     if heading and body:
-        lead = body[0]
-        return f"{heading}：{lead}"
+        return f"{heading}：{body[0]}"
     if heading:
         return heading
     return body[0]
+
+
+
+def _legacy_summary(bucket: str, content: str, fallback: str = "") -> str:
+    best = _extract_best_section(content, bucket, max_lines=2).strip()
+    if not best:
+        return fallback or ""
+    return _summarize_lines(best.splitlines()) or (fallback or "")
+
+
+
+def _facet_order(bucket: str) -> tuple[str, ...]:
+    return FACET_ORDER_BY_BUCKET.get(bucket, ("decision", "constraint", "risk", "verification"))
+
+
+
+def _facet_rank(bucket: str, facet: str) -> int:
+    order = _facet_order(bucket)
+    try:
+        return order.index(facet)
+    except ValueError:
+        return len(order)
+
+
+
+def _keyword_score(text: str, keywords: tuple[str, ...], *, base: int) -> int:
+    score = 0
+    for idx, keyword in enumerate(keywords):
+        if keyword in text:
+            score += base - idx * 5
+    return score
+
+
+
+def _heading_matches_facet(heading: str, facet: str) -> bool:
+    return _keyword_score(heading, FACET_KEYWORDS.get(facet, ()), base=100) > 0
+
+
+
+def _detect_facet(bucket: str, heading: str, body: list[str]) -> tuple[str | None, int]:
+    body_text = " ".join(body[:2])
+    scores: dict[str, int] = {}
+    for facet, keywords in FACET_KEYWORDS.items():
+        score = _keyword_score(heading, keywords, base=100)
+        score += _keyword_score(body_text, keywords, base=20)
+        scores[facet] = score
+
+    facet, score = max(scores.items(), key=lambda item: (item[1], -_facet_rank(bucket, item[0])))
+    if score <= 0:
+        return None, 0
+    return facet, score
+
+
+
+def _is_generic_heading(heading: str, facet: str) -> bool:
+    normalized = re.sub(r"[\s:：\-_/()（）]", "", heading)
+    if heading in GENERIC_SECTION_HEADINGS:
+        return True
+    if len(normalized) > 4:
+        return False
+    return any(keyword in normalized for keyword in FACET_KEYWORDS.get(facet, ()))
+
+
+
+def _section_summary(heading: str, body: list[str]) -> str:
+    if heading and body:
+        return f"{heading}：{body[0]}"
+    if heading:
+        return heading
+    return body[0] if body else ""
+
+
+
+def _section_candidates(bucket: str, content: str) -> list[dict]:
+    candidates: list[dict] = []
+    for index, (heading, body) in enumerate(_parse_h2_sections(content)):
+        facet, facet_score = _detect_facet(bucket, heading, body)
+        if not facet:
+            continue
+        summary = _section_summary(heading, body)
+        if not summary:
+            continue
+        candidates.append({
+            "summary": summary,
+            "compatibility_summary": body[0] if body and _is_generic_heading(heading, facet) else summary,
+            "facet": facet,
+            "facet_score": facet_score,
+            "is_generic_heading": _is_generic_heading(heading, facet),
+            "specificity": len(heading),
+            "body_size": len(body),
+            "index": index,
+        })
+    return candidates
+
+
+
+def _sorted_candidates(bucket: str, candidates: list[dict]) -> list[dict]:
+    return sorted(
+        candidates,
+        key=lambda item: (
+            _facet_rank(bucket, item["facet"]),
+            item.get("is_generic_heading", False),
+            -item["facet_score"],
+            -item["specificity"],
+            -item["body_size"],
+            item["index"],
+        ),
+    )
+
+
+
+def _select_primary_summary(bucket: str, content: str, fallback: str = "") -> tuple[str, str | None]:
+    candidates = _sorted_candidates(bucket, _section_candidates(bucket, content))
+    if candidates:
+        primary = candidates[0]
+        return primary["summary"], primary["facet"]
+    return _legacy_summary(bucket, content, fallback), None
+
+
+
+def _select_secondary_summary(bucket: str, content: str, primary_summary: str, primary_facet: str | None) -> str:
+    primary_normalized = _normalize_summary_text(primary_summary)
+    for candidate in _sorted_candidates(bucket, _section_candidates(bucket, content)):
+        summary = candidate["summary"]
+        compatibility_summary = candidate.get("compatibility_summary", summary)
+        normalized = _normalize_summary_text(summary)
+        compatibility_normalized = _normalize_summary_text(compatibility_summary)
+        if not normalized or normalized == primary_normalized:
+            continue
+        if primary_facet and candidate["facet"] == primary_facet:
+            continue
+        if normalized in primary_normalized or primary_normalized in normalized:
+            continue
+        if compatibility_normalized and (compatibility_normalized in primary_normalized or primary_normalized in compatibility_normalized):
+            continue
+        return summary
+    return ""
+
+
+
+def summarize_markdown(bucket: str, content: str, fallback: str = "") -> str:
+    primary_summary, primary_facet = _select_primary_summary(bucket, content, fallback)
+    if not primary_summary:
+        return fallback or ""
+
+    secondary_summary = _select_secondary_summary(bucket, content, primary_summary, primary_facet)
+    if not secondary_summary:
+        return primary_summary
+    return f"{primary_summary}；{secondary_summary}"
+
 
 
 def summary_candidates_markdown(bucket: str, content: str, fallback: str = "") -> list[str]:
@@ -85,22 +256,22 @@ def summary_candidates_markdown(bucket: str, content: str, fallback: str = "") -
         seen.add(normalized)
         candidates.append(normalized)
 
-    add(summarize_markdown(bucket, content, fallback))
+    canonical_summary = summarize_markdown(bucket, content, fallback)
+    legacy_summary = _legacy_summary(bucket, content, fallback)
+    add(canonical_summary)
+    add(legacy_summary)
 
     title = _extract_h1_title(content)
-    if title:
-        add(title)
-
-    for section in _extract_h2_sections(content):
-        section_summary = summarize_markdown(bucket, section, fallback)
-        add(section_summary)
-        if title and section_summary:
-            normalized_title = _normalize_summary_text(title)
-            normalized_section = _normalize_summary_text(section_summary)
-            if normalized_section != normalized_title and not normalized_section.startswith(f"{normalized_title}："):
-                add(f"{title}：{section_summary}")
+    primary_summary, primary_facet = _select_primary_summary(bucket, content, fallback)
+    if title and canonical_summary and canonical_summary != title and not canonical_summary.startswith(f"{title}："):
+        add(f"{title}：{canonical_summary}")
+    elif title and primary_summary and primary_facet and not _heading_matches_facet(title, primary_facet):
+        add(f"{title}：{primary_summary}")
+    if title and legacy_summary and legacy_summary != title and not legacy_summary.startswith(f"{title}："):
+        add(f"{title}：{legacy_summary}")
 
     return candidates
+
 
 
 def summarize_doc(bucket: str, filename: str, project_root: Path | None = None) -> str:
@@ -108,9 +279,11 @@ def summarize_doc(bucket: str, filename: str, project_root: Path | None = None) 
     return summarize_markdown(bucket, content, fallback=filename) or filename
 
 
+
 def summary_candidates_doc(bucket: str, filename: str, project_root: Path | None = None) -> list[str]:
     content = paths.file_path(bucket, filename, project_root).read_text(encoding="utf-8")
     return summary_candidates_markdown(bucket, content, fallback=filename)
+
 
 
 def refresh_doc_summary(bucket: str, filename: str, project_root: Path | None = None, summary: str | None = None) -> bool:
@@ -153,6 +326,7 @@ def refresh_doc_summary(bucket: str, filename: str, project_root: Path | None = 
     return True
 
 
+
 def register_doc(bucket: str, filename: str, topic: str, summary: str,
                  anchor: str | None = None, project_root: Path | None = None) -> None:
     err = paths.validate_bucket(bucket)
@@ -169,6 +343,7 @@ def register_doc(bucket: str, filename: str, topic: str, summary: str,
     _update_topics_knowledge(topics_file, topic, summary, bucket, filename, anchor)
 
 
+
 def _update_topics_knowledge(topics_file: Path, topic: str, summary: str,
                              bucket: str, filename: str, anchor: str | None) -> None:
     """Update the knowledge file section of topics.md."""
@@ -183,7 +358,6 @@ def _update_topics_knowledge(topics_file: Path, topic: str, summary: str,
     content = topics_file.read_text(encoding="utf-8")
     lines = content.splitlines()
 
-    # Find knowledge section boundaries
     knowledge_start = None
     knowledge_end = len(lines)
     for i, line in enumerate(lines):
@@ -199,7 +373,6 @@ def _update_topics_knowledge(topics_file: Path, topic: str, summary: str,
         knowledge_start = len(lines) - 1
         knowledge_end = len(lines)
 
-    # Find or create topic subsection within knowledge section
     topic_header = f"### {topic}"
     topic_start = None
     topic_end = knowledge_end
@@ -227,6 +400,7 @@ def _update_topics_knowledge(topics_file: Path, topic: str, summary: str,
             lines.insert(knowledge_end + idx, new_line)
 
     atomic_write(topics_file, "\n".join(lines) + "\n")
+
 
 
 def run(args: list[str]) -> None:

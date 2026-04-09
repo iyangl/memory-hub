@@ -59,7 +59,7 @@ def _infer_task_kind(task: str) -> str:
 
 
 def _task_tokens(task: str) -> set[str]:
-    chunks = re.findall(r"[A-Za-z0-9_\-/]+|[\u4e00-\u9fff]+", task.lower())
+    chunks = re.findall(r"[A-Za-z0-9_\-/\.]+|[\u4e00-\u9fff]+", task.lower())
     tokens: set[str] = set()
     for chunk in chunks:
         parts = [chunk]
@@ -79,12 +79,43 @@ def _task_tokens(task: str) -> set[str]:
 
 
 
-def _match_score(task: str, text: str) -> int:
-    tokens = _task_tokens(task)
+def _is_code_identifier_token(token: str) -> bool:
+    if len(token) < 3:
+        return False
+    if token.endswith((".py", ".ts", ".tsx", ".js", ".jsx", ".json", ".md")):
+        return True
+    if any(marker in token for marker in ("_", "/", ".")):
+        return True
+    return False
+
+
+
+def _semantic_task_tokens(task: str) -> set[str]:
+    return {token for token in _task_tokens(task) if not _is_code_identifier_token(token)}
+
+
+
+def _identifier_task_tokens(task: str) -> set[str]:
+    return {token for token in _task_tokens(task) if _is_code_identifier_token(token)}
+
+
+
+def _token_match_score(tokens: set[str], text: str) -> int:
     if not tokens:
         return 0
     text_lower = text.lower()
     return sum(1 for token in tokens if token in text_lower)
+
+
+
+def _match_breakdown(task: str, text: str) -> tuple[int, int]:
+    return _token_match_score(_semantic_task_tokens(task), text), _token_match_score(_identifier_task_tokens(task), text)
+
+
+
+def _match_score(task: str, text: str) -> int:
+    semantic_score, identifier_score = _match_breakdown(task, text)
+    return semantic_score * 2 + identifier_score
 
 
 
@@ -203,6 +234,36 @@ def _parse_topics(project_root: Path | None) -> tuple[list[dict], list[dict]]:
 
 
 
+def _source_oriented_gap() -> str:
+    return "当前任务主要依赖源码实现上下文，durable docs 无法稳定回答。"
+
+
+
+def _has_strong_durable_signal(task: str, doc_matches: list[dict], module_matches: list[dict]) -> bool:
+    semantic_tokens = _semantic_task_tokens(task)
+    locator_text = _initial_locator_text(doc_matches, module_matches)
+    if semantic_tokens and _token_match_score(semantic_tokens, locator_text) > 0:
+        return True
+    if any("BRIEF 命中" in item["reason"] or "topics 命中" in item["reason"] for item in doc_matches):
+        return True
+    return any(
+        "topics 命中" in item["reason"] or "module card 命中" in item["reason"] or item.get("entry_points")
+        for item in module_matches
+    )
+
+
+
+def _is_source_oriented_task(task: str, task_kind: str, doc_matches: list[dict], module_matches: list[dict]) -> bool:
+    if task_kind not in {"understand", "locate"}:
+        return False
+    if any(keyword in task for keyword in SEARCH_FIRST_HINTS):
+        return False
+    if not _identifier_task_tokens(task):
+        return False
+    return not _has_strong_durable_signal(task, doc_matches, module_matches)
+
+
+
 def _extract_module_name(module_card: str) -> str:
     first_line = module_card.splitlines()[0].strip()
     return first_line[2:].strip() if first_line.startswith("# ") else ""
@@ -256,9 +317,11 @@ def _collect_doc_matches(task: str, task_kind: str, project_root: Path | None) -
     candidates: dict[tuple[str, str], dict] = {}
 
     for entry in brief_entries:
-        score = _match_score(task, f"{entry['bucket']} {entry['file']} {entry['summary']}")
-        if score <= 0:
+        searchable = f"{entry['bucket']} {entry['file']} {entry['summary']}"
+        semantic_score, identifier_score = _match_breakdown(task, searchable)
+        if semantic_score <= 0 and (task_kind in {"understand", "locate"} or identifier_score <= 0):
             continue
+        score = semantic_score * 2 + identifier_score
         key = (entry["bucket"], entry["file"])
         candidate = candidates.setdefault(key, {
             "bucket": entry["bucket"],
@@ -270,9 +333,11 @@ def _collect_doc_matches(task: str, task_kind: str, project_root: Path | None) -
         candidate["reasons"].append(f"BRIEF 命中：{entry['summary'][:60] or entry['file']}")
 
     for entry in knowledge_entries:
-        score = _match_score(task, f"{entry['topic']} {entry['summary']} {entry['file']} {entry['bucket']}")
-        if score <= 0:
+        searchable = f"{entry['topic']} {entry['summary']} {entry['file']} {entry['bucket']}"
+        semantic_score, identifier_score = _match_breakdown(task, searchable)
+        if semantic_score <= 0 and (task_kind in {"understand", "locate"} or identifier_score <= 0):
             continue
+        score = semantic_score * 2 + identifier_score
         key = (entry["bucket"], entry["file"])
         candidate = candidates.setdefault(key, {
             "bucket": entry["bucket"],
@@ -299,9 +364,11 @@ def _collect_module_matches(task: str, task_kind: str, project_root: Path | None
     candidates: dict[str, dict] = {}
 
     for entry in topic_modules:
-        score = _match_score(task, f"{entry['name']} {entry['summary']} {' '.join(entry['entry_points'])}")
-        if score <= 0:
+        searchable = f"{entry['name']} {entry['summary']} {' '.join(entry['entry_points'])}"
+        semantic_score, identifier_score = _match_breakdown(task, searchable)
+        if semantic_score <= 0 and (task_kind in {"understand", "locate"} or identifier_score <= 0):
             continue
+        score = semantic_score * 2 + identifier_score
         candidate = candidates.setdefault(entry["name"], {
             "name": entry["name"],
             "score": 0,
@@ -320,9 +387,10 @@ def _collect_module_matches(task: str, task_kind: str, project_root: Path | None
             " ".join(card["risks"]),
             " ".join(card["verification"]),
         ])
-        score = _match_score(task, searchable)
-        if score <= 0:
+        semantic_score, identifier_score = _match_breakdown(task, searchable)
+        if semantic_score <= 0 and (task_kind in {"understand", "locate"} or identifier_score <= 0):
             continue
+        score = semantic_score * 2 + identifier_score
         candidate = candidates.setdefault(card["name"], {
             "name": card["name"],
             "score": 0,
@@ -539,7 +607,10 @@ def _merge_module_matches(primary: list[dict], secondary: list[dict]) -> list[di
 
 
 
-def _decide_recall_level(task: str, task_kind: str, search_first: bool, doc_matches: list[dict], module_matches: list[dict]) -> str:
+def _decide_recall_level(task: str, task_kind: str, search_first: bool, source_oriented: bool, doc_matches: list[dict], module_matches: list[dict]) -> str:
+    if source_oriented:
+        return "skip"
+
     high_risk = any(keyword in task for keyword in HIGH_RISK_PATTERNS) or task_kind in {"decide", "validate"}
     source_count = len(doc_matches) + len(module_matches)
 
@@ -571,7 +642,7 @@ def plan_recall(task: str, project_root: Path | None = None) -> dict:
     task_kind = _infer_task_kind(task)
     initial_doc_matches = _collect_doc_matches(task, task_kind, project_root)
     initial_module_matches = _collect_module_matches(task, task_kind, project_root)
-    unresolved_tokens = _unmatched_task_tokens(task, initial_doc_matches, initial_module_matches)
+    initial_unresolved_tokens = _unmatched_task_tokens(task, initial_doc_matches, initial_module_matches)
 
     search_first = _should_search_first(task, task_kind, initial_doc_matches, initial_module_matches)
     search_queries: list[str] = []
@@ -607,15 +678,33 @@ def plan_recall(task: str, project_root: Path | None = None) -> dict:
         doc_matches = initial_doc_matches
         module_matches = initial_module_matches
 
+    unresolved_tokens = _unmatched_task_tokens(task, doc_matches, module_matches)
+    source_oriented = _is_source_oriented_task(task, task_kind, doc_matches, module_matches)
+
     total_sources = len(doc_matches) + len(module_matches)
     ambiguity = "low"
-    if search_first and total_sources == 0:
+    if source_oriented:
         ambiguity = "high"
-    elif unresolved_tokens or total_sources <= 2:
+    elif search_first and total_sources == 0:
+        ambiguity = "high"
+    elif initial_unresolved_tokens or total_sources <= 2:
         ambiguity = "medium"
-    recall_level = _decide_recall_level(task, task_kind, search_first and total_sources == 0, doc_matches, module_matches)
+    recall_level = _decide_recall_level(
+        task,
+        task_kind,
+        search_first and total_sources == 0,
+        source_oriented,
+        doc_matches,
+        module_matches,
+    )
+
+    if source_oriented:
+        doc_matches = []
+        module_matches = []
 
     why_these = []
+    if source_oriented:
+        why_these.append("当前任务更适合直接阅读源码实现，durable recall 只能提供弱相关背景。")
     if doc_matches and any("BRIEF 命中" in item["reason"] for item in doc_matches):
         why_these.append("BRIEF 提供了与当前任务最相关的 durable docs 线索。")
     if doc_matches and any("topics 命中" in item["reason"] for item in doc_matches):
@@ -632,11 +721,13 @@ def plan_recall(task: str, project_root: Path | None = None) -> dict:
         why_these.append("先读取最相关的 BRIEF / topics / module cards，再决定 recall 深度。")
 
     evidence_gaps = []
+    if source_oriented:
+        evidence_gaps.append(_source_oriented_gap())
     if search_stage_completed and not total_sources:
         evidence_gaps.append("当前无法仅凭 BRIEF、topics、module cards 与搜索结果稳定定位目标对象。")
-    if not doc_matches:
+    if not source_oriented and not doc_matches:
         evidence_gaps.append("尚未找到明确的 durable docs 命中。")
-    if not module_matches:
+    if not source_oriented and not module_matches:
         evidence_gaps.append("尚未找到明确的 module card 命中。")
     evidence_gaps = list(dict.fromkeys(evidence_gaps))
     primary_evidence_gap = evidence_gaps[0] if evidence_gaps else None

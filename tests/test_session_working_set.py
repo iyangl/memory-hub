@@ -2,7 +2,7 @@
 
 import pytest
 
-from lib.session_working_set import build_working_set
+from lib.session_working_set import WORKING_SET_VERSION, build_working_set
 
 
 @pytest.fixture
@@ -20,7 +20,7 @@ def project(tmp_path):
         encoding="utf-8",
     )
     (memory / "catalog" / "modules" / "checkout.md").write_text(
-        "# checkout\n\n## 何时阅读\n\n当任务涉及结算时阅读。\n\n## 推荐入口\n- `packages/checkout/index.ts`\n- `packages/checkout/rules.ts`\n\n## 隐含约束\n- 先确认优惠规则。\n- 不要跳过上限校验。\n\n## 主要风险\n- 金额错误。\n\n## 验证重点\n- 回归价格计算。\n",
+        "# checkout\n\n## 何时阅读\n\n当任务涉及结算时阅读。\n\n## 推荐入口\n- `packages/checkout/index.ts`\n- `packages/checkout/rules.ts`\n\n## 隐含约束\n- 先确认优惠规则。\n- 不要跳过上限校验。\n\n## 主要风险\n- 金额错误。\n\n## 验证重点\n- 回归价格计算。\n- 核对优惠上限。\n",
         encoding="utf-8",
     )
     return tmp_path
@@ -43,6 +43,7 @@ def test_build_working_set_keeps_sources_and_structured_module_context(project):
         "why_these": ["任务涉及业务规则与主模块入口"],
     }
     result = build_working_set(plan, project, "plan.json")
+    assert result["version"] == WORKING_SET_VERSION
     assert result["items"]
     assert all(item["sources"] for item in result["items"])
     assert result["evidence_gaps"] == ["尚未确认 promotion 是否参与"]
@@ -52,13 +53,19 @@ def test_build_working_set_keeps_sources_and_structured_module_context(project):
     assert any(bullet.startswith("约束: ") for bullet in navigation["bullets"])
     assert any(bullet.startswith("风险: ") for bullet in navigation["bullets"])
     assert any(bullet.startswith("验证: ") for bullet in navigation["bullets"])
+    assert navigation["constraints"] == ["先确认优惠规则。", "不要跳过上限校验。"]
+    assert navigation["risks"] == ["金额错误。"]
+    assert navigation["verification_focus"] == ["回归价格计算。", "核对优惠上限。"]
     assert "主模块" in navigation["selected_because"]
     assert "金额链路风险" in navigation["selected_because"]
 
     module_reads = [item for item in result["priority_reads"] if item["type"] == "module"]
     assert len(module_reads) == 1
     assert result["primary_evidence_gap"] == "尚未确认 promotion 是否参与"
-    assert result["verification_focus"] == ["回归价格计算。"]
+    assert result["decision_points"] == ["优惠券规则会影响后续动作。", "只适用于 checkout。", "Use recall-first."]
+    assert result["constraints"] == ["先确认优惠规则。", "不要跳过上限校验。"]
+    assert result["risks"] == ["金额错误。"]
+    assert result["verification_focus"] == ["回归价格计算。", "核对优惠上限。"]
     assert result["durable_candidates"]
 
 
@@ -104,13 +111,13 @@ def test_working_set_applies_limits_and_dedupes(tmp_path):
     assert result["summary"] == "需要读取多份规则 需要读取多个模块"
 
 
-def test_verification_focus_only_uses_compressed_items(tmp_path):
+def test_verification_focus_keeps_explicit_facets_not_compressed_bullets_only(tmp_path):
     memory = tmp_path / ".memory"
     (memory / "docs" / "pm").mkdir(parents=True)
     (memory / "catalog" / "modules").mkdir(parents=True)
 
     (memory / "docs" / "pm" / "rule.md").write_text(
-        "## 规则\n\n- 规则一\n- 规则二\n- 规则三\n- 规则四\n- 验证: 不应回流\n",
+        "## 规则\n\n- 规则一\n- 规则二\n- 规则三\n- 规则四\n\n## 验证策略\n\n- 对账金额\n",
         encoding="utf-8",
     )
     (memory / "catalog" / "modules" / "checkout.md").write_text(
@@ -132,8 +139,58 @@ def test_verification_focus_only_uses_compressed_items(tmp_path):
     }
 
     result = build_working_set(plan, tmp_path, "plan.json")
-    assert result["verification_focus"] == ["回归价格计算。"]
-    assert all(focus != "不应回流" for focus in result["verification_focus"])
+    assert result["verification_focus"] == ["对账金额", "回归价格计算。"]
+
+
+def test_working_set_limits_top_level_facets(tmp_path):
+    memory = tmp_path / ".memory"
+    (memory / "docs" / "pm").mkdir(parents=True)
+
+    (memory / "docs" / "pm" / "rule.md").write_text(
+        "## 风险\n\n- 风险一\n- 风险二\n- 风险三\n- 风险四\n- 风险五\n\n## 验证策略\n\n- 验证一\n- 验证二\n- 验证三\n- 验证四\n- 验证五\n",
+        encoding="utf-8",
+    )
+
+    plan = {
+        "task": "验证 facet 限长",
+        "recall_level": "deep",
+        "recommended_docs": [
+            {"bucket": "pm", "file": "rule.md", "reason": "规则", "priority": 1},
+        ],
+        "recommended_modules": [],
+        "evidence_gaps": [],
+        "why_these": ["需要限制 facet 规模"],
+    }
+
+    result = build_working_set(plan, tmp_path, "plan.json")
+    assert result["risks"] == ["风险一", "风险二", "风险三", "风险四"]
+    assert result["verification_focus"] == ["验证一", "验证二", "验证三", "验证四"]
+
+
+
+def test_working_set_preserves_all_explicit_facet_values_from_single_section(tmp_path):
+    memory = tmp_path / ".memory"
+    (memory / "docs" / "pm").mkdir(parents=True)
+
+    (memory / "docs" / "pm" / "rule.md").write_text(
+        "## 风险\n\n- 风险一\n- 风险二\n- 风险三\n- 风险四\n\n## 验证策略\n\n- 验证一\n- 验证二\n- 验证三\n",
+        encoding="utf-8",
+    )
+
+    plan = {
+        "task": "验证 facet 保真",
+        "recall_level": "deep",
+        "recommended_docs": [
+            {"bucket": "pm", "file": "rule.md", "reason": "规则", "priority": 1},
+        ],
+        "recommended_modules": [],
+        "evidence_gaps": [],
+        "why_these": ["需要完整保留风险和验证"],
+    }
+
+    result = build_working_set(plan, tmp_path, "plan.json")
+    assert result["risks"] == ["风险一", "风险二", "风险三", "风险四"]
+    assert result["verification_focus"] == ["验证一", "验证二", "验证三"]
 
 
 def test_verification_focus_dedupes_and_preserves_order(tmp_path):
@@ -192,6 +249,31 @@ def test_working_set_returns_empty_verification_focus_without_matches(tmp_path):
     result = build_working_set(plan, tmp_path, "plan.json")
     assert result["verification_focus"] == []
     assert result["primary_evidence_gap"] is None
+
+
+def test_working_set_prioritizes_module_constraints_risks_and_verification(project):
+    plan = {
+        "task": "重构 checkout 优惠券规则",
+        "recall_level": "deep",
+        "recommended_docs": [],
+        "recommended_modules": [
+            {"name": "checkout", "reason": "主模块", "priority": 1, "entry_points": ["packages/checkout/index.ts"]},
+        ],
+        "evidence_gaps": [],
+        "why_these": ["需要主模块导航"],
+    }
+
+    result = build_working_set(plan, project, "plan.json")
+    navigation = next(item for item in result["items"] if item["kind"] == "navigation")
+    assert navigation["bullets"][:3] == [
+        "约束: 先确认优惠规则。",
+        "风险: 金额错误。",
+        "验证: 回归价格计算。",
+    ]
+    assert navigation["constraints"] == ["先确认优惠规则。", "不要跳过上限校验。"]
+    assert navigation["risks"] == ["金额错误。"]
+    assert navigation["verification_focus"] == ["回归价格计算。", "核对优惠上限。"]
+    assert result["verification_focus"] == ["回归价格计算。", "核对优惠上限。"]
 
 
 def test_working_set_requires_deep(project):

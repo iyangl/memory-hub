@@ -10,28 +10,33 @@ import re
 from pathlib import Path
 
 from lib import envelope, paths
-from lib.scan_modules import scan
+from lib.scan_modules import MODULE_CARD_GENERATOR_VERSION, scan
 from lib.utils import find_module_name_collisions, sanitize_module_name
 
 _HASH_RE = re.compile(r"<!--\s*structure_hash:\s*(\w+)\s*-->")
+_VERSION_RE = re.compile(r"<!--\s*generator_version:\s*(\S+)\s*-->")
 
 
-def _read_card_hashes(project_root: Path | None = None) -> dict[str, str]:
-    """Read structure_hash from existing module card files.
+def _read_card_metadata(project_root: Path | None = None) -> dict[str, dict[str, str]]:
+    """Read module card metadata from existing module card files.
 
-    Returns {sanitized_module_name: hash}.
+    Returns {sanitized_module_name: {"structure_hash": "...", "generator_version": "..."}}.
     """
     modules_dir = paths.modules_path(project_root)
     if not modules_dir.is_dir():
         return {}
 
-    result: dict[str, str] = {}
+    result: dict[str, dict[str, str]] = {}
     for card in modules_dir.iterdir():
         if card.suffix != ".md":
             continue
         content = card.read_text(encoding="utf-8")
-        m = _HASH_RE.search(content)
-        result[card.stem] = m.group(1) if m else ""
+        hash_match = _HASH_RE.search(content)
+        version_match = _VERSION_RE.search(content)
+        result[card.stem] = {
+            "structure_hash": hash_match.group(1) if hash_match else "",
+            "generator_version": version_match.group(1) if version_match else "",
+        }
     return result
 
 
@@ -48,15 +53,18 @@ def check_modules(project_root: Path | None = None) -> dict:
             details={"collisions": collisions},
         )
 
-    current_hashes: dict[str, str] = {}
+    current_metadata: dict[str, dict[str, str]] = {}
     for mod in current_modules:
         key = sanitize_module_name(mod["name"])
-        current_hashes[key] = mod.get("structure_hash", "")
+        current_metadata[key] = {
+            "structure_hash": mod.get("structure_hash", ""),
+            "generator_version": mod.get("generator_version", MODULE_CARD_GENERATOR_VERSION),
+        }
 
-    card_hashes = _read_card_hashes(project_root)
+    card_metadata = _read_card_metadata(project_root)
 
-    current_keys = set(current_hashes)
-    card_keys = set(card_hashes)
+    current_keys = set(current_metadata)
+    card_keys = set(card_metadata)
 
     added = sorted(current_keys - card_keys)
     removed = sorted(card_keys - current_keys)
@@ -64,9 +72,13 @@ def check_modules(project_root: Path | None = None) -> dict:
     stale = []
     up_to_date = []
     for key in sorted(current_keys & card_keys):
-        cur = current_hashes[key]
-        stored = card_hashes[key]
-        if not stored or cur != stored:
+        current = current_metadata[key]
+        stored = card_metadata[key]
+        if (
+            not stored.get("structure_hash")
+            or stored.get("structure_hash") != current["structure_hash"]
+            or stored.get("generator_version") != current["generator_version"]
+        ):
             stale.append(key)
         else:
             up_to_date.append(key)

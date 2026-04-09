@@ -42,6 +42,20 @@ class TestSummarizeMarkdown:
         summary = summarize_markdown("pm", "## Checkout 优惠券规则\n\n- 先计算折扣再做上限校验\n")
         assert summary == "Checkout 优惠券规则：先计算折扣再做上限校验"
 
+    def test_prefers_high_value_facet_and_appends_secondary_facet(self):
+        summary = summarize_markdown(
+            "pm",
+            "## 背景\n\n- 只是背景\n\n## 规则\n\n- 先计算折扣再做上限校验\n\n## 风险\n\n- 金额链路容易失真\n",
+        )
+        assert summary == "规则：先计算折扣再做上限校验；风险：金额链路容易失真"
+
+    def test_falls_back_to_legacy_summary_without_facet_keywords(self):
+        summary = summarize_markdown(
+            "pm",
+            "## 背景\n\n- 先介绍上下文\n\n## 适用对象\n\n- checkout\n",
+        )
+        assert summary == "背景：先介绍上下文"
+
     def test_summary_candidates_include_title_prefixed_variant(self, initialized_project):
         fp = initialized_project / ".memory" / "docs" / "architect" / "caching.md"
         fp.write_text("# 缓存策略\n\n## 决策\n\n- 使用本地文件缓存\n", encoding="utf-8")
@@ -49,6 +63,30 @@ class TestSummarizeMarkdown:
         candidates = summary_candidates_doc("architect", "caching.md", initialized_project)
         assert "决策：使用本地文件缓存" in candidates
         assert "缓存策略：决策：使用本地文件缓存" in candidates
+
+    def test_summary_candidates_exclude_bare_title_only_variant(self, initialized_project):
+        fp = initialized_project / ".memory" / "docs" / "pm" / "decisions.md"
+        fp.write_text(
+            "# 缓存策略\n\n## 决策\n\n- 使用本地文件缓存\n\n## 风险\n\n- 金额链路容易失真\n",
+            encoding="utf-8",
+        )
+
+        candidates = summary_candidates_doc("pm", "decisions.md", initialized_project)
+        assert "决策：使用本地文件缓存；风险：金额链路容易失真" in candidates
+        assert "缓存策略：决策：使用本地文件缓存；风险：金额链路容易失真" in candidates
+        assert "缓存策略" not in candidates
+
+    def test_summary_candidates_keep_legacy_and_new_summary(self, initialized_project):
+        fp = initialized_project / ".memory" / "docs" / "pm" / "decisions.md"
+        fp.write_text(
+            "## 规则\n\n- 先计算折扣再做上限校验\n\n## 风险\n\n- 金额链路容易失真\n",
+            encoding="utf-8",
+        )
+
+        candidates = summary_candidates_doc("pm", "decisions.md", initialized_project)
+        assert "规则：先计算折扣再做上限校验；风险：金额链路容易失真" in candidates
+        assert "规则：先计算折扣再做上限校验" in candidates
+        assert "缓存策略" not in candidates
 
 
 class TestIndex:

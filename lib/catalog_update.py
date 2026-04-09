@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 
 from lib import envelope, paths
+from lib.scan_modules import MODULE_CARD_GENERATOR_VERSION
 from lib.utils import atomic_write, find_module_name_collisions, sanitize_module_name
 
 TOPICS_CODE_HEADER = "## 代码模块"
@@ -70,8 +71,9 @@ def _generate_module_md(module: dict) -> str:
     _append_list_section(lines, "## 关联记忆", [f"`{item}`" for item in related_memory])
 
     structure_hash = module.get("structure_hash", "")
+    lines.append(f"\n<!-- generator_version: {MODULE_CARD_GENERATOR_VERSION} -->")
     if structure_hash:
-        lines.append(f"\n<!-- structure_hash: {structure_hash} -->")
+        lines.append(f"<!-- structure_hash: {structure_hash} -->")
 
     lines.append("")
     return "\n".join(lines)
@@ -181,6 +183,7 @@ def run(args: list[str]) -> None:
             skipped.append({"name": m.get("name", ""), "reason": error})
             continue
         m_copy = dict(m)
+        m_copy["generator_version"] = MODULE_CARD_GENERATOR_VERSION
         m_copy["_sanitized"] = sanitized
         new_module_names.add(sanitized)
         atomic_write(modules_dir / f"{sanitized}.md", _generate_module_md(m_copy))

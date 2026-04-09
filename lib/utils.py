@@ -6,6 +6,23 @@ import re
 from pathlib import Path
 
 
+COMMON_FACET_KEYWORDS = {
+    "decision": ("决策", "结论", "规则", "口径", "原则", "范围", "需求"),
+    "constraint": ("约束", "约定", "规范", "流程", "命名"),
+    "risk": ("风险", "注意", "误区", "陷阱"),
+    "verification": ("验证", "测试", "策略", "回归", "检查"),
+}
+COMMON_FACET_ORDER_BY_BUCKET = {
+    "architect": ("decision", "constraint", "risk", "verification"),
+    "pm": ("decision", "risk", "verification", "constraint"),
+    "qa": ("verification", "risk", "decision", "constraint"),
+    "dev": ("constraint", "decision", "risk", "verification"),
+}
+COMMON_GENERIC_SECTION_HEADINGS = frozenset({
+    keyword for keywords in COMMON_FACET_KEYWORDS.values() for keyword in keywords
+})
+
+
 def sanitize_module_name(name: str) -> str:
     """Sanitize a module name for use as a filename.
 

@@ -101,11 +101,13 @@ class TestDiscoverModules:
         assert "verification_focus" in lib_mod
         assert "related_memory" in lib_mod
         assert "structure_hash" in lib_mod
+        assert "generator_version" in lib_mod
         assert len(lib_mod["structure_hash"]) == 8
         assert lib_mod["summary"].startswith("基于 ")
-        assert "`lib/__init__.py`" in lib_mod["summary"] or "`lib/core.py`" in lib_mod["summary"]
-        assert any("`" in item for item in lib_mod["implicit_constraints"])
-        assert any("入口文件" in item or "测试文件" in item or "目录名" in item for item in lib_mod["known_risks"])
+        assert "先看 `lib/__init__.py`" in lib_mod["summary"]
+        assert any("下钻" in item or "补读" in item for item in lib_mod["implicit_constraints"])
+        assert any("装配或导出" in item or "清单文件" in item for item in lib_mod["known_risks"])
+        assert any(desc for desc in [item["description"] for item in lib_mod["files"]])
 
     def test_structure_hash_deterministic(self, python_project):
         modules1 = _discover_modules(python_project)
@@ -128,12 +130,61 @@ class TestDiscoverModules:
         root_files = [f["path"] for f in root_mod["files"]]
         assert "main.py" in root_files
         assert root_mod["entry_points"]
+        assert any("全局配置" in item for item in root_mod["implicit_constraints"])
 
     def test_monorepo_container(self, monorepo_project):
         modules = _discover_modules(monorepo_project)
         names = [m["name"] for m in modules]
         assert "packages/web" in names
         assert "packages/api" in names
+        web_mod = next(m for m in modules if m["name"] == "packages/web")
+        assert any("package.json" in item for item in web_mod["implicit_constraints"])
+        assert any("清单文件" in item for item in web_mod["known_risks"])
+
+    def test_tests_module_guides_back_to_implementation(self, python_project):
+        modules = _discover_modules(python_project)
+        tests_mod = next(m for m in modules if m["name"] == "tests")
+        assert "回到对应实现模块" in tests_mod["read_when"]
+        assert any("回到实现模块" in item for item in tests_mod["implicit_constraints"])
+        assert any("测试入口" in item for item in tests_mod["verification_focus"])
+
+    def test_spec_like_module_is_treated_as_test_module(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text("[project]\nname = 'demo'\n")
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        (spec_dir / "checkout_spec.py").write_text("# spec")
+
+        modules = _discover_modules(tmp_path)
+        spec_mod = next(m for m in modules if m["name"] == "spec")
+        assert "回到对应实现模块" in spec_mod["read_when"]
+        assert any("回到实现模块" in item for item in spec_mod["implicit_constraints"])
+        assert any("测试入口" in item for item in spec_mod["verification_focus"])
+        assert "docs/qa/strategy.md" in spec_mod["related_memory"]
+
+    def test_spec_directory_without_test_signals_is_not_treated_as_test_module(self, tmp_path):
+        (tmp_path / "package.json").write_text('{"name": "demo"}')
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        (spec_dir / "domain.ts").write_text("export const domain = true\n")
+
+        modules = _discover_modules(tmp_path)
+        spec_mod = next(m for m in modules if m["name"] == "spec")
+        assert "回到对应实现模块" not in spec_mod["read_when"]
+        assert all("回到实现模块" not in item for item in spec_mod["implicit_constraints"])
+        assert "docs/dev/conventions.md" in spec_mod["related_memory"]
+
+    def test_runtime_entry_ranks_ahead_of_init_file(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text("[project]\nname = 'demo'\n")
+        lib_dir = tmp_path / "lib"
+        lib_dir.mkdir()
+        (lib_dir / "__init__.py").write_text("")
+        (lib_dir / "main.py").write_text("def main():\n    return True\n")
+        (lib_dir / "core.py").write_text("# core\n")
+
+        modules = _discover_modules(tmp_path)
+        lib_mod = next(m for m in modules if m["name"] == "lib")
+        assert lib_mod["entry_points"][0] == "lib/main.py"
+        assert "先看 `lib/main.py`" in lib_mod["summary"]
 
 
 class TestScan:

@@ -68,14 +68,38 @@ SOURCE_EXTS = frozenset({
     ".toml", ".yaml", ".yml", ".json",
 })
 
+RUNTIME_ENTRY_FILES = frozenset({
+    "__main__.py",
+    "main.py", "main.go", "main.rs", "main.ts", "main.js",
+    "index.ts", "index.js", "index.tsx", "index.jsx",
+    "app.py", "app.ts", "app.js",
+})
+BOUNDARY_FILES = frozenset({"__init__.py", "mod.rs", "lib.rs"})
+DISPATCHER_FILES = RUNTIME_ENTRY_FILES | BOUNDARY_FILES
+CANONICAL_TEST_DIR_NAMES = frozenset({"test", "tests", "__tests__"})
+AMBIGUOUS_TEST_DIR_NAMES = frozenset({"spec", "specs"})
+TEST_DIR_NAMES = CANONICAL_TEST_DIR_NAMES | AMBIGUOUS_TEST_DIR_NAMES
+TEST_FILE_MARKERS = (".test.", ".spec.", "_test.", "_spec.")
 MAX_FILES_PER_MODULE = 15
 MAX_ENTRY_POINTS = 3
 MAX_READ_ORDER = 5
+MODULE_CARD_GENERATOR_VERSION = "2"
 
 
 def _format_path_examples(paths: list[str], limit: int = 2) -> str:
     examples = [f"`{path}`" for path in paths[:limit] if path]
     return "、".join(examples)
+
+
+def _unique_strings(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
 
 
 def _detect_project_type(root: Path) -> str:
@@ -211,28 +235,115 @@ def _is_module_dir(directory: Path, root: Path, tracked: set[str] | None) -> boo
     return False
 
 
+def _is_manifest_file(path: str) -> bool:
+    return Path(path).name in MARKER_FILES
+
+
+def _is_test_file(path: str) -> bool:
+    lower_path = path.lower()
+    parts = {part.lower() for part in Path(path).parts}
+    name = Path(path).name.lower()
+    return (
+        bool(parts & CANONICAL_TEST_DIR_NAMES)
+        or (bool(parts & AMBIGUOUS_TEST_DIR_NAMES) and any(marker in lower_path for marker in TEST_FILE_MARKERS))
+        or name.startswith("test_")
+        or any(marker in lower_path for marker in TEST_FILE_MARKERS)
+    )
+
+
+def _is_dispatcher_file(path: str) -> bool:
+    return Path(path).name in DISPATCHER_FILES
+
+
+def _is_runtime_entry_file(path: str) -> bool:
+    return Path(path).name in RUNTIME_ENTRY_FILES
+
+
+def _module_is_test_like(name: str, files: list[str]) -> bool:
+    parts = {part.lower() for part in Path(name).parts}
+    if bool(parts & CANONICAL_TEST_DIR_NAMES) or name.endswith("tests"):
+        return True
+    if bool(parts & AMBIGUOUS_TEST_DIR_NAMES):
+        return any(_is_test_file(path) for path in files)
+    return False
+
+
+def _manifest_files(files: list[str]) -> list[str]:
+    return [path for path in files if _is_manifest_file(path)]
+
+
+def _test_files(files: list[str]) -> list[str]:
+    return [path for path in files if _is_test_file(path)]
+
+
+def _downstream_files(files: list[str], entry_points: list[str]) -> list[str]:
+    return [
+        path
+        for path in files
+        if path not in entry_points and not _is_manifest_file(path) and not _is_test_file(path)
+    ]
+
+
 def _guess_entry_points(files: list[str]) -> list[str]:
-    preferred = []
-    for path in files:
-        name = Path(path).name
-        if name in NOTABLE_PATTERNS:
-            preferred.append(path)
-    ordered = preferred + [p for p in files if p not in preferred]
+    def rank(path: str) -> tuple[int, str]:
+        if _is_runtime_entry_file(path) and not _is_test_file(path):
+            return (0, path)
+        if Path(path).name in BOUNDARY_FILES and not _is_test_file(path):
+            return (1, path)
+        if not _is_dispatcher_file(path) and not _is_manifest_file(path) and not _is_test_file(path):
+            return (2, path)
+        if _is_manifest_file(path):
+            return (3, path)
+        return (4, path)
+
+    ordered = sorted(_unique_strings(files), key=rank)
     return ordered[:MAX_ENTRY_POINTS]
 
 
-def _guess_read_when(name: str, entry_points: list[str], files: list[str]) -> str:
-    example = _format_path_examples(entry_points or files, limit=2)
+def _guess_summary(name: str, files: list[str], entry_points: list[str], notable_files: list[str]) -> str:
+    entry_example = _format_path_examples(entry_points or notable_files or files, limit=2)
+    manifest_example = _format_path_examples(_manifest_files(files), limit=1)
+    test_example = _format_path_examples(_test_files(files), limit=2)
+    downstream_example = _format_path_examples(_downstream_files(notable_files, entry_points), limit=2)
+
     if name == "root":
-        return f"当任务涉及项目入口、全局配置或无法确定模块归属时阅读；先看 {example or '根目录代表文件'}。"
-    if "/tests" in name or name.endswith("tests") or name == "tests":
-        return f"当任务涉及验证策略、回归范围或测试入口时阅读；先看 {example or '测试文件'}。"
-    return f"当任务涉及 {name} 的职责、边界或入口时阅读；优先从 {example or '代表文件'} 开始。"
+        if entry_example and manifest_example and manifest_example not in entry_example:
+            detail = f"先看 {entry_example} 定位入口，再结合 {manifest_example} 确认全局配置。"
+        else:
+            detail = f"先看 {entry_example or manifest_example or '根目录代表文件'} 定位入口与配置。"
+    elif _module_is_test_like(name, files):
+        detail = f"先看 {test_example or entry_example or '测试文件'} 定位回归入口，再回到对应实现模块。"
+    elif entry_example and downstream_example and downstream_example not in entry_example:
+        detail = f"先看 {entry_example}，再下钻 {downstream_example}。"
+    elif entry_example and manifest_example and manifest_example not in entry_example:
+        detail = f"先看 {entry_example}，必要时补读 {manifest_example}。"
+    else:
+        detail = f"先看 {entry_example or '代表文件'}。"
+    return f"基于 {len(files)} 个跟踪文件生成的模块导航；{detail}"
+
+
+def _guess_read_when(name: str, entry_points: list[str], files: list[str]) -> str:
+    entry_example = _format_path_examples(entry_points or files, limit=2)
+    manifest_example = _format_path_examples(_manifest_files(files), limit=1)
+    test_example = _format_path_examples(_test_files(files), limit=2)
+    downstream_example = _format_path_examples(_downstream_files(files, entry_points), limit=2)
+
+    if name == "root":
+        if entry_example and manifest_example and manifest_example not in entry_example:
+            return f"当任务涉及项目入口、运行方式、全局配置或无法确定模块归属时阅读；先看 {entry_example}，必要时补读 {manifest_example}。"
+        return f"当任务涉及项目入口、运行方式、全局配置或无法确定模块归属时阅读；先看 {entry_example or manifest_example or '根目录代表文件'}。"
+    if _module_is_test_like(name, files):
+        return f"当任务涉及回归范围、测试入口或需要确认行为覆盖时阅读；先看 {test_example or entry_example or '测试文件'}，再回到对应实现模块。"
+    if entry_example and downstream_example and downstream_example not in entry_example:
+        return f"当任务涉及 {name} 的职责、入口或调用链时阅读；先看 {entry_example}，再继续 {downstream_example}。"
+    if entry_example and manifest_example and manifest_example not in entry_example:
+        return f"当任务涉及 {name} 的入口、依赖边界或构建形态时阅读；先看 {entry_example}，必要时补读 {manifest_example}。"
+    return f"当任务涉及 {name} 的职责、边界或入口时阅读；优先从 {entry_example or '代表文件'} 开始。"
 
 
 def _guess_read_order(entry_points: list[str], notable_files: list[str]) -> list[str]:
     ordered = []
-    for path in entry_points + notable_files:
+    for path in entry_points + _downstream_files(notable_files, entry_points) + _manifest_files(notable_files) + _test_files(notable_files) + notable_files:
         if path not in ordered:
             ordered.append(path)
     return ordered[:MAX_READ_ORDER]
@@ -241,45 +352,62 @@ def _guess_read_order(entry_points: list[str], notable_files: list[str]) -> list
 def _guess_constraints(name: str, files: list[str], entry_points: list[str]) -> list[str]:
     constraints = []
     entry_example = _format_path_examples(entry_points, limit=2)
-    if entry_example:
-        constraints.append(f"先从 {entry_example} 定位模块边界，再决定是否继续下钻。")
-    if any(Path(f).name in {"package.json", "pyproject.toml", "go.mod", "Cargo.toml"} for f in files):
-        manifest_files = [f for f in files if Path(f).name in {"package.json", "pyproject.toml", "go.mod", "Cargo.toml"}]
-        constraints.append(f"若要判断职责或依赖，先读清单文件 {_format_path_examples(manifest_files, limit=2)}。")
+    dispatcher_example = _format_path_examples([path for path in entry_points if _is_dispatcher_file(path)], limit=2)
+    downstream_example = _format_path_examples(_downstream_files(files, entry_points), limit=2)
+    manifest_example = _format_path_examples(_manifest_files(files), limit=2)
+
+    if _module_is_test_like(name, files):
+        constraints.append("tests 用于定位行为与回归入口，确认测试后仍需回到实现模块。")
+    if dispatcher_example and downstream_example:
+        constraints.append(f"先用 {dispatcher_example} 确认入口或装配方式，再继续下钻 {downstream_example}。")
+    elif entry_example:
+        constraints.append(f"先从 {entry_example} 确认阅读起点，再决定是否继续下钻。")
+    if manifest_example:
+        constraints.append(f"涉及依赖、构建或发布边界时，补读 {manifest_example}。")
     if name == "root":
-        constraints.append("root 只提供全局入口与配置线索，不能替代具体业务模块。")
-    if not constraints:
-        constraints.append("先从代表文件确认职责，再决定是否扩大阅读范围。")
-    return constraints
+        constraints.append("root 只提供全局入口与全局配置线索，不能替代具体业务模块。")
+    return _unique_strings(constraints)[:3] or ["先从代表文件确认职责，再决定是否扩大阅读范围。"]
 
 
 def _guess_risks(name: str, files: list[str], entry_points: list[str]) -> list[str]:
     risks = []
+    test_example = _format_path_examples(_test_files(files), limit=2)
+    dispatcher_example = _format_path_examples([path for path in entry_points if _is_dispatcher_file(path)], limit=2)
+    downstream_example = _format_path_examples(_downstream_files(files, entry_points), limit=2)
+    manifest_example = _format_path_examples(_manifest_files(files), limit=2)
+
     if name == "root":
         risks.append("root 入口容易让人误以为已经掌握业务细节，实际仍需下钻具体模块。")
-    test_files = [f for f in files if "test" in Path(f).name.lower()]
-    if test_files:
-        risks.append(f"测试文件 {_format_path_examples(test_files, limit=2)} 只反映验证方式，不等于真实运行入口。")
-    if entry_points and any(Path(path).name.startswith("index.") or Path(path).name.startswith("main.") for path in entry_points):
-        risks.append(f"入口文件 {_format_path_examples(entry_points, limit=2)} 可能只负责分发，业务规则在下游文件。")
-    if not risks:
-        risks.append(f"若只根据目录名 {name} 理解模块，容易忽略真实入口与隐含约束。")
-    return risks
+    if _module_is_test_like(name, files):
+        risks.append(f"测试文件 {test_example or '测试文件'} 只说明验证切口，仍需回到被测实现。")
+    elif test_example:
+        risks.append(f"测试锚点 {test_example} 只反映验证方式，不等于真实运行入口。")
+    if dispatcher_example:
+        risks.append(f"入口文件 {dispatcher_example} 可能只负责装配或导出，真实规则在 {downstream_example or '下游实现文件'}。")
+    if manifest_example:
+        risks.append(f"清单文件 {manifest_example} 能说明依赖与边界，但不能代替运行时逻辑。")
+    return _unique_strings(risks)[:3] or [f"若只根据目录名 {name} 理解模块，容易忽略真实入口与隐含约束。"]
 
 
 def _guess_verification_focus(name: str, entry_points: list[str], files: list[str]) -> list[str]:
-    if name == "tests":
-        return [f"确认测试入口 {_format_path_examples(entry_points or files, limit=2) or '测试文件'} 覆盖的行为与当前任务相关。"]
     focuses = []
-    if entry_points:
-        focuses.append(f"确认入口文件 {_format_path_examples(entry_points, limit=2)} 是否足以定位改动边界。")
+    test_example = _format_path_examples(_test_files(files), limit=2)
+    manifest_example = _format_path_examples(_manifest_files(files), limit=1)
+
+    if _module_is_test_like(name, files):
+        focuses.append(f"确认测试入口 {test_example or '测试文件'} 是否覆盖当前任务涉及的行为与回归范围。")
+        return _unique_strings(focuses)[:2]
+    if test_example:
+        focuses.append(f"对照测试锚点 {test_example}，确认当前改动仍被回归覆盖。")
+    if manifest_example:
+        focuses.append(f"确认 {manifest_example} 声明的边界或入口没有与改动范围失配。")
     focuses.append("确认改动后需要补测或回归的关键路径。")
-    return focuses
+    return _unique_strings(focuses)[:3]
 
 
-def _guess_related_memory(name: str) -> list[str]:
+def _guess_related_memory(name: str, files: list[str]) -> list[str]:
     refs = ["docs/architect/decisions.md"]
-    if name == "tests":
+    if _module_is_test_like(name, files):
         refs.append("docs/qa/strategy.md")
     else:
         refs.append("docs/dev/conventions.md")
@@ -292,24 +420,40 @@ def _compute_structure_hash(files: list[str]) -> str:
     return hashlib.sha256(joined.encode("utf-8")).hexdigest()[:8]
 
 
+def _describe_file(path: str, entry_points: list[str]) -> str:
+    name = Path(path).name
+    if _is_manifest_file(path):
+        return "依赖/构建清单"
+    if _is_test_file(path):
+        return "测试锚点"
+    if path in entry_points and name == "__init__.py":
+        return "模块边界入口"
+    if path in entry_points and _is_dispatcher_file(path):
+        return "入口/装配层"
+    if path in entry_points:
+        return "优先阅读入口"
+    return "代表实现文件"
+
+
 def _build_module(name: str, files: list[str], prefix: str) -> dict:
     notable_files = _pick_notable_files(files, prefix)
     entry_points = _guess_entry_points(notable_files)
-    summary = f"基于 {len(files)} 个跟踪文件生成的模块导航，代表文件：{_format_path_examples(notable_files, limit=2) or '无'}。"
+    summary = _guess_summary(name, files, entry_points, notable_files)
     return {
         "name": name,
         "summary": summary,
         "total_files": len(files),
+        "generator_version": MODULE_CARD_GENERATOR_VERSION,
         "structure_hash": _compute_structure_hash(files),
         "dir_tree": _build_dir_tree(files, prefix),
-        "files": [{"path": f, "description": ""} for f in notable_files],
-        "read_when": _guess_read_when(name, entry_points, notable_files),
+        "files": [{"path": path, "description": _describe_file(path, entry_points)} for path in notable_files],
+        "read_when": _guess_read_when(name, entry_points, files),
         "entry_points": entry_points,
         "read_order": _guess_read_order(entry_points, notable_files),
         "implicit_constraints": _guess_constraints(name, files, entry_points),
         "known_risks": _guess_risks(name, files, entry_points),
         "verification_focus": _guess_verification_focus(name, entry_points, files),
-        "related_memory": _guess_related_memory(name),
+        "related_memory": _guess_related_memory(name, files),
     }
 
 
@@ -378,4 +522,5 @@ def run(args: list[str]) -> None:
         payload = dict(result)
         payload["output_file"] = str(Path(parsed.out))
         envelope.ok(payload)
+        return
     envelope.ok(result)

@@ -4,11 +4,10 @@ import json
 import subprocess
 import pytest
 from io import StringIO
-from pathlib import Path
 import sys
 
-from lib import paths
 from lib.utils import sanitize_module_name
+from lib.scan_modules import MODULE_CARD_GENERATOR_VERSION
 
 
 def run_cmd(module_name, args):
@@ -27,25 +26,26 @@ def run_cmd(module_name, args):
 @pytest.fixture
 def project_with_cards(tmp_path):
     """Create a project with source files and matching module cards."""
-    # Source files
     lib_dir = tmp_path / "lib"
     lib_dir.mkdir()
     (lib_dir / "__init__.py").write_text("")
     (lib_dir / "core.py").write_text("# core")
     (tmp_path / "pyproject.toml").write_text("[project]\nname = 'demo'\n")
 
-    # Run scan to get the hash
     from lib.scan_modules import scan
     scan_result = scan(tmp_path)
     modules = scan_result["modules"]
 
-    # Create module cards with correct hashes
     modules_dir = tmp_path / ".memory" / "catalog" / "modules"
     modules_dir.mkdir(parents=True)
     for mod in modules:
         name = sanitize_module_name(mod["name"])
         h = mod.get("structure_hash", "")
-        card = f"# {mod['name']}\n\n> summary\n\n<!-- structure_hash: {h} -->\n"
+        card = (
+            f"# {mod['name']}\n\n> summary\n\n"
+            f"<!-- generator_version: {MODULE_CARD_GENERATOR_VERSION} -->\n"
+            f"<!-- structure_hash: {h} -->\n"
+        )
         (modules_dir / f"{name}.md").write_text(card, encoding="utf-8")
 
     return tmp_path
@@ -64,7 +64,6 @@ class TestModulesCheck:
         assert len(data["up_to_date"]) > 0
 
     def test_detects_new_module(self, project_with_cards):
-        # Add a new module directory
         new_dir = project_with_cards / "newmod"
         new_dir.mkdir()
         (new_dir / "main.py").write_text("# new")
@@ -76,10 +75,9 @@ class TestModulesCheck:
         assert "newmod" in result["data"]["added"]
 
     def test_detects_removed_module(self, project_with_cards):
-        # Add an extra card that has no corresponding source
         modules_dir = project_with_cards / ".memory" / "catalog" / "modules"
         (modules_dir / "ghost.md").write_text(
-            "# ghost\n\n<!-- structure_hash: deadbeef -->\n",
+            f"# ghost\n\n<!-- generator_version: {MODULE_CARD_GENERATOR_VERSION} -->\n<!-- structure_hash: deadbeef -->\n",
             encoding="utf-8",
         )
 
@@ -90,7 +88,6 @@ class TestModulesCheck:
         assert "ghost" in result["data"]["removed"]
 
     def test_detects_structure_change(self, project_with_cards):
-        # Add a file to an existing module to change its hash
         lib_dir = project_with_cards / "lib"
         (lib_dir / "new_file.py").write_text("# new")
 
@@ -101,7 +98,6 @@ class TestModulesCheck:
         assert "lib" in result["data"]["stale"]
 
     def test_no_cards_returns_all_added(self, tmp_path):
-        # Project with source but no .memory/catalog/modules
         lib_dir = tmp_path / "lib"
         lib_dir.mkdir()
         (lib_dir / "main.py").write_text("# main")
@@ -134,7 +130,11 @@ class TestModulesCheck:
         for mod in scan_result["modules"]:
             name = sanitize_module_name(mod["name"])
             h = mod.get("structure_hash", "")
-            card = f"# {mod['name']}\n\n> summary\n\n<!-- structure_hash: {h} -->\n"
+            card = (
+                f"# {mod['name']}\n\n> summary\n\n"
+                f"<!-- generator_version: {MODULE_CARD_GENERATOR_VERSION} -->\n"
+                f"<!-- structure_hash: {h} -->\n"
+            )
             (modules_dir / f"{name}.md").write_text(card, encoding="utf-8")
 
         new_dir = tmp_path / "newmod"
@@ -147,13 +147,33 @@ class TestModulesCheck:
         assert code == 0
         assert "newmod" in result["data"]["added"]
 
+    def test_marks_cards_without_generator_version_as_stale(self, project_with_cards):
+        modules_dir = project_with_cards / ".memory" / "catalog" / "modules"
+        lib_card = modules_dir / "lib.md"
+        content = lib_card.read_text(encoding="utf-8")
+        lib_card.write_text(content.replace(f"<!-- generator_version: {MODULE_CARD_GENERATOR_VERSION} -->\n", ""), encoding="utf-8")
+
+        result, code = run_cmd("lib.modules_check", ["--project-root", str(project_with_cards)])
+        assert code == 0
+        assert "lib" in result["data"]["stale"]
+
+    def test_marks_cards_with_old_generator_version_as_stale(self, project_with_cards):
+        modules_dir = project_with_cards / ".memory" / "catalog" / "modules"
+        lib_card = modules_dir / "lib.md"
+        content = lib_card.read_text(encoding="utf-8")
+        lib_card.write_text(content.replace(f"{MODULE_CARD_GENERATOR_VERSION}", "1", 1), encoding="utf-8")
+
+        result, code = run_cmd("lib.modules_check", ["--project-root", str(project_with_cards)])
+        assert code == 0
+        assert "lib" in result["data"]["stale"]
+
     def test_rejects_module_name_collisions(self, tmp_path, monkeypatch):
         from lib import modules_check
 
         monkeypatch.setattr(modules_check, "scan", lambda _root, include_untracked=True: {
             "modules": [
-                {"name": "packages/web", "structure_hash": "11111111"},
-                {"name": "packages-web", "structure_hash": "22222222"},
+                {"name": "packages/web", "structure_hash": "11111111", "generator_version": MODULE_CARD_GENERATOR_VERSION},
+                {"name": "packages-web", "structure_hash": "22222222", "generator_version": MODULE_CARD_GENERATOR_VERSION},
             ]
         })
 
