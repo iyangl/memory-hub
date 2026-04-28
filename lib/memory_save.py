@@ -14,8 +14,6 @@ from typing import Any
 from uuid import uuid4
 
 from lib import envelope, paths
-from lib.brief import generate_brief
-from lib.catalog_repair import repair
 from lib.memory_index import refresh_doc_summary, register_doc, summarize_markdown
 from lib.memory_read import find_anchor, read_doc
 from lib.memory_search import search_docs
@@ -104,15 +102,6 @@ def _normalize_source_refs(source_refs: Any, *, entry_id: str) -> list[dict[str,
     return normalized
 
 
-def _looks_like_working_set_payload(payload: Any) -> bool:
-    return (
-        isinstance(payload, dict)
-        and isinstance(payload.get("items"), list)
-        and isinstance(payload.get("priority_reads"), list)
-        and isinstance(payload.get("durable_candidates"), list)
-    )
-
-
 def _effective_project_root(project_root: Path | None) -> Path:
     return (project_root or Path.cwd()).resolve()
 
@@ -152,79 +141,15 @@ def _save_trace_filename(request_file: Path | None) -> str:
     return f"{timestamp}_{uuid4().hex}_{normalized_stem}.json"
 
 
-def _collect_working_set_excerpts(payload: dict[str, Any]) -> list[str]:
-    excerpts: list[str] = []
-
-    summary = payload.get("summary")
-    if isinstance(summary, str) and summary.strip():
-        excerpts.append(summary)
-
-    for item in payload.get("items", []):
-        if not isinstance(item, dict):
-            continue
-        item_summary = item.get("summary") if isinstance(item.get("summary"), str) else ""
-        bullets = [bullet for bullet in item.get("bullets", []) if isinstance(bullet, str) and bullet.strip()]
-        if item_summary.strip():
-            excerpts.append(item_summary)
-        if item_summary.strip() and bullets:
-            excerpts.append("\n".join([item_summary, *bullets]))
-        elif len(bullets) >= 2:
-            excerpts.append("\n".join(bullets))
-
-    for candidate in payload.get("durable_candidates", []):
-        if isinstance(candidate, str) and candidate.strip():
-            excerpts.append(candidate)
-
-    return excerpts
-
-
-def _load_session_working_set_sources(project_root: Path | None) -> list[dict[str, Any]]:
-    session_root = paths.session_root(project_root)
-    if not session_root.exists():
-        return []
-
-    sources: list[dict[str, Any]] = []
-    seen: set[tuple[str, str]] = set()
-    for session_file in sorted(session_root.iterdir()):
-        if not session_file.is_file() or session_file.suffix.lower() != ".json":
-            continue
-        try:
-            payload = json.loads(session_file.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        if not _looks_like_working_set_payload(payload):
-            continue
-
-        path_ref = _session_ref_path(session_file, project_root)
-        for excerpt in _collect_working_set_excerpts(payload):
-            normalized_excerpt = _normalize_text(excerpt)
-            if not normalized_excerpt:
-                continue
-            key = (path_ref, normalized_excerpt)
-            if key in seen:
-                continue
-            seen.add(key)
-            sources.append({
-                "type": "working_set",
-                "path": path_ref,
-                "excerpt": excerpt,
-            })
-    return sources
-
-
 def _ensure_not_verbatim_working_set(
     payload_text: str,
     source_refs: list[dict[str, Any]],
     *,
     entry_id: str,
-    session_working_set_sources: list[dict[str, Any]],
     project_root: Path | None,
 ) -> None:
     normalized_payload = _normalize_text(payload_text)
-    candidate_sources = [
-        *[source for source in source_refs if _looks_like_working_set_source(source, project_root)],
-        *session_working_set_sources,
-    ]
+    candidate_sources = [source for source in source_refs if _looks_like_working_set_source(source, project_root)]
 
     seen: set[tuple[str, str]] = set()
     for source in candidate_sources:
@@ -336,10 +261,12 @@ def _validate_index(entry: dict[str, Any], *, entry_id: str) -> dict[str, str | 
         return None
 
     index = entry.get("index")
+    if index is None:
+        return None
     if not isinstance(index, dict):
         raise SaveError(
             "INVALID_SAVE_REQUEST",
-            "Create save entries must include index.topic and index.summary.",
+            "index must be a JSON object when provided.",
             details={"entry_id": entry_id},
         )
 
@@ -490,7 +417,6 @@ def _validate_entry(
     index: int,
     project_root: Path | None,
     seen_targets: set[str],
-    session_working_set_sources: list[dict[str, Any]],
 ) -> dict[str, Any]:
     if not isinstance(entry, dict):
         raise SaveError(
@@ -552,7 +478,6 @@ def _validate_entry(
             payload["text"],
             evidence["source_refs"],
             entry_id=entry_id,
-            session_working_set_sources=session_working_set_sources,
             project_root=project_root,
         )
 
@@ -573,7 +498,11 @@ def _entry_summary_override(entry: dict[str, Any]) -> str | None:
     if action == "noop":
         return None
     if action == "create":
-        return entry["index"]["summary"]
+        index_data = entry.get("index")
+        if isinstance(index_data, dict):
+            return index_data["summary"]
+        content = _ensure_doc_text(entry["payload"]["text"])
+        return summarize_markdown(entry["bucket"], content, fallback=entry["filename"])
     if action == "append":
         return summarize_markdown(entry["bucket"], entry["payload"]["text"], fallback=entry["filename"])
     content = _ensure_doc_text(entry["payload"]["text"])
@@ -629,17 +558,22 @@ def _restore_entry_summary(entry: dict[str, Any], project_root: Path | None) -> 
     action = entry["action"]
     if action == "noop":
         return False
+
     summary_override = _entry_summary_override(entry)
     if action == "create":
+        index_data = entry.get("index")
+        if not isinstance(index_data, dict):
+            return False
         register_doc(
             entry["bucket"],
             entry["filename"],
-            entry["index"]["topic"],
-            summary_override or entry["index"]["summary"],
-            entry["index"]["anchor"],
+            index_data["topic"],
+            summary_override or index_data["summary"],
+            index_data["anchor"],
             project_root,
         )
         return True
+
     return refresh_doc_summary(entry["bucket"], entry["filename"], project_root, summary=summary_override)
 
 
@@ -653,20 +587,13 @@ def _apply_entry(entry: dict[str, Any], project_root: Path | None) -> dict[str, 
 
     if action == "create":
         atomic_write(target_path, _ensure_doc_text(entry["payload"]["text"]))
-        register_doc(
-            entry["bucket"],
-            entry["filename"],
-            entry["index"]["topic"],
-            entry["index"]["summary"],
-            entry["index"]["anchor"],
-            project_root,
-        )
+        indexed = _restore_entry_summary(entry, project_root)
         return {
             "id": entry["id"],
             "action": action,
             "target": written_ref,
-            "indexed": True,
-            "summary_refreshed": True,
+            "indexed": indexed,
+            "summary_refreshed": indexed,
         }
 
     summary_override = _entry_summary_override(entry)
@@ -697,14 +624,12 @@ def execute_save(
 
     normalized = _validate_request(request)
     seen_targets: set[str] = set()
-    session_working_set_sources = _load_session_working_set_sources(project_root)
     validated_entries = [
         _validate_entry(
             entry,
             index=idx,
             project_root=project_root,
             seen_targets=seen_targets,
-            session_working_set_sources=session_working_set_sources,
         )
         for idx, entry in enumerate(normalized["entries"])
     ]
@@ -738,10 +663,6 @@ def execute_save(
     response_code = "NOOP"
     trace_output: dict[str, Any] = {"update_supersedes": [], "trace_file": None, "warning": None}
     if changed:
-        generate_brief(project_root)
-        repair_result = repair(project_root)
-        for entry in validated_entries:
-            _restore_entry_summary(entry, project_root)
         update_traces = _update_traces(validated_entries)
         trace_output = {
             "update_supersedes": update_traces,
@@ -758,12 +679,6 @@ def execute_save(
                 )
             except (OSError, UnicodeError) as exc:
                 trace_output["warning"] = f"save trace not persisted: {exc}"
-        rebuild = {
-            "brief": True,
-            "catalog_repair": repair_result,
-        }
-        ai_actions = repair_result.get("ai_actions", [])
-        manual_actions = repair_result.get("manual_actions", [])
         response_code = "SUCCESS"
 
     data = {

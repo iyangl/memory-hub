@@ -1,4 +1,4 @@
-"""working-set — build a task-scoped session working set from a recall plan.
+"""working-set — deprecated legacy command.
 
 Usage: memory-hub working-set --plan-file <path> [--project-root <path>] [--out <file>]
 """
@@ -16,6 +16,7 @@ from lib.utils import (
     COMMON_FACET_ORDER_BY_BUCKET,
     COMMON_GENERIC_SECTION_HEADINGS,
     atomic_write,
+    fail_legacy_command,
     sanitize_module_name,
 )
 
@@ -371,29 +372,11 @@ def build_working_set(plan: dict, project_root: Path | None = None, source_plan:
 
 
 def run(args: list[str]) -> None:
-    parser = argparse.ArgumentParser(prog="memory-hub working-set")
-    parser.add_argument("--plan-file", required=True, help="Path to recall-plan JSON file")
-    parser.add_argument("--project-root", help="Project root directory", default=None)
-    parser.add_argument("--out", help="Optional output file for working set JSON")
-    parsed = parser.parse_args(args)
-
-    project_root = Path(parsed.project_root) if parsed.project_root else None
-    plan_file = Path(parsed.plan_file)
-    if not plan_file.exists():
-        envelope.fail("FILE_NOT_FOUND", f"Plan file not found: {parsed.plan_file}")
-    try:
-        plan = json.loads(plan_file.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as e:
-        envelope.fail("INVALID_JSON", f"Failed to parse plan file: {e}")
-
-    result = build_working_set(plan, project_root, str(plan_file))
-    if parsed.out:
-        out_path = Path(parsed.out)
-    else:
-        slug = sanitize_module_name(plan.get("task", "working-set")[:80])
-        out_path = paths.session_file_path(slug or "working-set", project_root=project_root)
-    atomic_write(out_path, json.dumps(result, ensure_ascii=False, indent=2) + "\n")
-
-    payload = dict(result)
-    payload["output_file"] = str(out_path)
-    envelope.ok(payload)
+    fail_legacy_command(
+        "working-set",
+        [
+            "memory-hub search <query>",
+            "memory-hub read <bucket> <file>",
+        ],
+        reason="Explicit-memory workflow no longer builds session working-set artifacts by default.",
+    )

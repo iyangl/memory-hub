@@ -4,7 +4,7 @@ description: '加载项目记忆到当前上下文'
 
 # /memory-hub:recall — 加载项目记忆
 
-按 recall-first 协议加载项目记忆：先读 base brief，再判定是否需要 search / light / deep recall。
+按显式记忆主路径加载项目记忆：优先 `search -> read`，只读取与当前任务直接相关的 durable docs。
 
 ## 上下文
 
@@ -14,121 +14,77 @@ description: '加载项目记忆到当前上下文'
 
 ## 执行流程
 
-### Step 1：确保 recall 上下文存在
+### Step 1：确保最小骨架存在
 
 如果仓库尚未初始化 `.memory/`，先执行：
 
 ```bash
-py -3 -m lib.cli init
+python3 -m lib.cli init
 ```
 
-如果 `.memory/` 已存在，至少重建 BRIEF：
+默认工作流里，`init` 只用于确保最小目录与基础文件存在；即使当前 core 仍会顺带生成 legacy 产物，也不把它们当作 recall 前置。
+
+### Step 2：先 search，再决定读什么
+
+如果用户提供了任务描述（`$ARGUMENTS`），先提炼 1~3 个检索词，然后执行：
 
 ```bash
-py -3 -m lib.cli brief
+python3 -m lib.cli search "<关键词>"
 ```
 
-注意：`brief` 只负责重建 `BRIEF.md`，不负责补齐整个 catalog；未初始化时必须先 `init`。
+原则：
+1. 先用 search 定位 durable docs
+2. 仅根据搜索命中决定读取范围
+3. 不默认读取 `BRIEF.md`
+4. 不默认执行 `recall-plan` / `working-set` / `execution-contract`
 
-### Step 1.5：检查 module cards 时效性（可选）
+### Step 3：读取命中的 durable docs
+
+对高相关命中，执行：
 
 ```bash
-py -3 -m lib.cli modules-check
+python3 -m lib.cli read <bucket> <filename>
 ```
 
-如果返回有 `stale`、`added` 或 `removed`，提示用户是否重新执行：
+必要时可先查看 bucket 文件列表：
 
 ```bash
-py -3 -m lib.cli scan-modules --out .memory/session/scan-modules.json
-py -3 -m lib.cli catalog-update --file .memory/session/scan-modules.json
+python3 -m lib.cli list <bucket>
 ```
 
-### Step 2：读取 base brief
+读取范围应保持最小化：
+- 能回答当前任务即可
+- 不因为存在 legacy catalog 就额外扩读
+- 不把 module cards 作为默认前置依赖
 
-读取 `.memory/BRIEF.md`，将其作为 boot summary 注入上下文。
+### Step 4：无命中时的处理
 
-### Step 3：执行 recall-plan 并保存结果
+如果 search 无法稳定定位相关 durable docs：
+- 直接说明当前没有可复用的显式记忆
+- 转入源码或当前任务上下文继续工作
+- 不为了 recall 再额外生成派生产物
 
-如果用户提供了任务描述（`$ARGUMENTS`），先执行：
+如确有兼容性需要，可显式使用 legacy 命令：
+- `catalog-read`
+- `brief`
+- `recall-plan`
+- `working-set`
+- `execution-contract`
 
-```bash
-py -3 -m lib.cli recall-plan --task "$ARGUMENTS" --out .memory/session/recall-plan.json
-```
+但这些都不是默认路径。
 
-planner 的职责：
-- 判断 `skip | light | deep`
-- 判断 `task_kind`
-- 判断是否需要 `search_first`
-- 推荐相关 docs / modules
-- 给出 `why_these`
-- 明确 `evidence_gaps`
-- 给出 `primary_evidence_gap`（当前主证据缺口）
-
-### Step 4：Search Before Guess
-
-如果 planner 返回 `search_first = true`：
-
-1. 先 search / catalog-read 定位相关对象
-2. 再决定应该读取哪些 docs 或 module cards
-3. 不允许仅凭任务文本直接猜来源
-
-可用命令：
-
-```bash
-py -3 -m lib.cli search "<关键词>"
-py -3 -m lib.cli catalog-read topics
-py -3 -m lib.cli catalog-read <module>
-py -3 -m lib.cli read <bucket> <filename>
-```
-
-### Step 5：按 recall 深度执行
-
-#### `skip`
-- 不再额外读取，直接开始工作
-- 或仅补充读取极少量高相关来源
-
-#### `light`
-- 读取 base brief + 少量相关 docs / module cards
-- 推荐来源时必须说明 `why_these`
-
-#### `deep`
-- 先根据 planner 结果构建 working set：
-
-```bash
-py -3 -m lib.cli working-set --plan-file .memory/session/recall-plan.json --out .memory/session/working-set.json
-```
-
-- working set 当前视为 `resume-pack(v1)`：会把高相关来源压缩成去重、限长、可直接消费的任务上下文
-- module item 会尽量带上约束、风险、验证重点
-- 先看 `primary_evidence_gap`，明确当前最主要的证据缺口
-- 再看 `verification_focus`，明确继续执行时最该盯住的验证点
-- 再把 working set 注入当前上下文
-- 如果 `evidence_gaps` 仍存在，先补读，再开始工作
-
-### Step 5.5：生成 execution-contract（仅 deep）
-
-```bash
-py -3 -m lib.cli execution-contract --working-set-file .memory/session/working-set.json --out .memory/session/execution-contract.json
-```
-
-- `execution-contract` 是 act 前边界：只固定 goal、allowed_sources、required_evidence、success_criteria 与 durable_candidates
-- 它不替代 `working-set`，也不是 `save` 的正式输入
-- 若 `primary_evidence_gap` 仍未解决，优先按 contract 补证据，再开始执行
-
-### Step 6：确认就绪
+### Step 5：确认就绪
 
 向用户简短确认：
-- 已读取的知识范围
-- recall level
-- 若为 deep，说明已生成 `working-set`（当前按 `resume-pack(v1)` 理解）与 `execution-contract`
-- 若有 `primary_evidence_gap`，优先明确指出
-- 若有 `verification_focus`，简要列出
-- 若仍有 `evidence_gaps`，明确列出
+- 搜索使用了哪些关键词
+- 实际读取了哪些 durable docs
+- 若无命中，明确说明“当前任务无可复用显式记忆”
 
 ---
 
 ## 注意事项
 
-- BRIEF.md 是派生产物，不直接手改
-- recall 的核心不是“读得越多越好”，而是“先定位、再决定读什么”
+- durable docs 在 `.memory/docs/`，这是默认 recall 的唯一正本
+- recall 的核心不是“读得越多越好”，而是“先 search，再决定读什么”
+- `BRIEF.md`、`catalog/`、`working-set`、`execution-contract` 都视为 legacy/兼容能力，不再是默认前置
 - 长会话中如果感觉上下文变得模糊，可以重新调用 `/memory-hub:recall`

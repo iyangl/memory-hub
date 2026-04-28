@@ -4,7 +4,7 @@ description: '提炼并持久化本次会话中的项目知识'
 
 # /memory-hub:save — 保存项目记忆
 
-按 recall-first contract 提炼 durable knowledge，生成结构化 `save-request`，再调用代码级 `save` core 执行写入与重建。
+按显式记忆 contract 提炼 durable knowledge，生成结构化 `save-request`，再调用 `save` core 执行写入。
 
 ## 上下文
 
@@ -19,7 +19,7 @@ description: '提炼并持久化本次会话中的项目知识'
 来源包括：
 1. `.memory/inbox/*.md`
 2. 当前会话中的决策、约束、风险、验证策略、业务口径
-3. 当前任务的 working set（只作为提炼原料，不可原样写回）
+3. 当前任务中已经明确成立、值得长期保存的结论
 
 ### Step 2：后悔测试
 
@@ -92,7 +92,8 @@ py -3 -m lib.cli read <bucket> <filename>
 ```
 
 补充约束：
-- `create` 必须带 `index.topic` / `index.summary`
+- `create` 的 `payload.doc_markdown` 必须自带清晰 heading，正文首段/首条要能表达主题
+- `create` 的 `index` 为可选；若提供 `index.topic` / `index.summary`，则继续维护 legacy `topics.md`
 - `append` 的 `section_markdown` 必须包含新的 heading
 - `update` 必须带 `payload.supersedes`
 - `update` 成功后，save core 会尽力在 `.memory/session/save-trace/` 下写入当前这次 save 的单独 trace artifact；若 trace 持久化失败，不影响 durable docs 已生效的 save 结果
@@ -105,15 +106,16 @@ py -3 -m lib.cli read <bucket> <filename>
 执行：
 
 ```bash
-py -3 -m lib.cli save --file .memory/session/save-request.json
+python3 -m lib.cli save --file .memory/session/save-request.json
 ```
 
 `save` core 会负责：
 - 校验 request 形状与 action 语义
 - 重放 evidence 校验
 - 执行 durable docs 写入
-- `create` 时注册 `topics.md`
-- 非 `noop` 后自动重建 `BRIEF.md` 与 `catalog-repair`
+- 若 `create` 提供了 `index`，则维护 legacy `topics.md`
+
+注意：Phase 2 之前，底层 core 仍可能顺带重建部分 legacy 派生产物；默认流程不依赖这些副作用，也不把它们当作成功条件。
 
 ### Step 7：读取结果并汇报
 
@@ -121,7 +123,6 @@ py -3 -m lib.cli save --file .memory/session/save-request.json
 - `create / append / merge / update / noop` 分别有哪些
 - 新增/更新了哪些 durable docs
 - 哪些候选被判定为 `noop`
-- `BRIEF.md` 是否已重建
 - 若失败，给出 `save` core 返回的错误码与原因
 
 说明：
@@ -145,8 +146,7 @@ py -3 -m lib.cli inbox-clean
 
 ## 边界
 
-- working set 不能原样写回 docs
 - docs 是唯一正本
-- BRIEF / catalog 都是派生产物
 - `noop` 是合法成功结果，不强制“为了保存而保存”
 - 不直接手工改 `.memory/docs/` 来绕过 `save` core
+- `BRIEF.md` / `catalog/` 属于 legacy/兼容产物，不再是默认写入成功条件

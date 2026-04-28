@@ -1,4 +1,4 @@
-"""End-to-end memory flow tests for recall-first chain."""
+"""End-to-end memory flow tests for explicit memory flows."""
 
 import json
 import pytest
@@ -19,79 +19,55 @@ def run_cmd(module_name, args):
         sys.stdout = old_stdout
 
 
-def test_recall_first_flow(tmp_path):
+def test_explicit_memory_flow_init_search_read_save(tmp_path):
     result, code = run_cmd("lib.memory_init", ["--project-root", str(tmp_path)])
     assert code == 0
+    assert result["ok"] is True
+    assert "manifest.json" in result["data"]["created_files"]
 
     docs = tmp_path / ".memory" / "docs"
-    (docs / "architect" / "decisions.md").write_text("## 决策\n\nUse recall-first", encoding="utf-8")
-    (docs / "pm" / "decisions.md").write_text("## 规则\n\nCheckout coupon rules", encoding="utf-8")
+    (docs / "architect" / "decisions.md").write_text("## 决策\n\nUse explicit memory", encoding="utf-8")
+    (docs / "pm" / "decisions.md").write_text("## Checkout 优惠券规则\n\n- 先计算折扣再做上限校验\n", encoding="utf-8")
     (docs / "qa" / "strategy.md").write_text("## 验证策略\n\n金额链路回归", encoding="utf-8")
 
-    modules_json = {
-        "modules": [{
-            "name": "checkout",
-            "summary": "结算模块",
-            "read_when": "当任务涉及结算时阅读。",
-            "entry_points": ["packages/checkout/index.ts"],
-            "read_order": ["packages/checkout/index.ts"],
-            "implicit_constraints": ["先确认优惠规则"],
-            "known_risks": ["金额错误"],
-            "verification_focus": ["回归价格计算"],
-            "related_memory": ["docs/pm/decisions.md"],
-            "files": [{"path": "packages/checkout/index.ts", "description": "入口"}],
-        }]
+    list_result, list_code = run_cmd("lib.memory_list", ["pm", "--project-root", str(tmp_path)])
+    assert list_code == 0
+    assert "decisions.md" in list_result["data"]["files"]
+
+    search_result, search_code = run_cmd("lib.memory_search", ["Checkout 优惠券规则", "--project-root", str(tmp_path)])
+    assert search_code == 0
+    assert search_result["data"]["total"] >= 1
+    assert any(match["file"] == "docs/pm/decisions.md" for match in search_result["data"]["matches"])
+
+    read_result, read_code = run_cmd("lib.memory_read", ["pm", "decisions.md", "--project-root", str(tmp_path)])
+    assert read_code == 0
+    assert "先计算折扣再做上限校验" in read_result["data"]["content"]
+
+    save_request = {
+        "version": "1",
+        "task": "save checkout rules",
+        "entries": [{
+            "id": "append-pm-rule",
+            "action": "append",
+            "reason": "stable checkout business rule",
+            "target": {"bucket": "pm", "file": "decisions.md"},
+            "payload": {"section_markdown": "## Checkout 上限校验\n\n- 折扣计算后再校验封顶值\n"},
+            "evidence": {
+                "search_queries": ["Checkout 优惠券规则"],
+                "read_refs": ["docs/pm/decisions.md", "docs/architect/decisions.md"],
+            },
+        }],
     }
-    modules_file = tmp_path / "modules.json"
-    modules_file.write_text(json.dumps(modules_json, ensure_ascii=False), encoding="utf-8")
+    request_file = tmp_path / "save-request.json"
+    request_file.write_text(json.dumps(save_request, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    result, code = run_cmd("lib.catalog_update", ["--file", str(modules_file), "--project-root", str(tmp_path)])
-    assert code == 0
+    save_result, save_code = run_cmd("lib.memory_save", ["--file", str(request_file), "--project-root", str(tmp_path)])
+    assert save_code == 0
+    assert save_result["code"] == "SUCCESS"
 
-    result, code = run_cmd("lib.brief", ["--project-root", str(tmp_path)])
-    assert code == 0
-
-    result, code = run_cmd("lib.recall_planner", ["--task", "重构 checkout 优惠券规则并验证风险", "--project-root", str(tmp_path), "--out", str(tmp_path / "plan.json")])
-    assert code == 0
-    assert result["data"]["recommended_modules"]
-    assert result["data"]["recommended_docs"]
-
-    plan_path = tmp_path / "plan.json"
-    planned = json.loads(plan_path.read_text(encoding="utf-8"))
-    assert planned["recall_level"] == "deep"
-
-    working_set_path = tmp_path / "working-set.json"
-    result, code = run_cmd("lib.session_working_set", ["--plan-file", str(plan_path), "--project-root", str(tmp_path), "--out", str(working_set_path)])
-    assert code == 0
-    assert result["data"]["version"] == "2"
-    assert result["data"]["items"]
-    assert result["data"]["output_file"] == str(working_set_path)
-
-    navigation = next(item for item in result["data"]["items"] if item["kind"] == "navigation")
-    assert any(bullet.startswith("约束: ") for bullet in navigation["bullets"])
-    assert any(bullet.startswith("风险: ") for bullet in navigation["bullets"])
-    assert any(bullet.startswith("验证: ") for bullet in navigation["bullets"])
-    assert result["data"]["priority_reads"]
-
-    assert result["data"]["constraints"] == ["先确认优惠规则"]
-    assert result["data"]["risks"] == ["金额错误"]
-    assert result["data"]["verification_focus"] == ["回归价格计算"]
-
-    contract_path = tmp_path / "execution-contract.json"
-    result, code = run_cmd("lib.execution_contract", ["--working-set-file", str(working_set_path), "--project-root", str(tmp_path), "--out", str(contract_path)])
-    assert code == 0
-    assert result["data"]["version"] == "2"
-    assert result["data"]["output_file"] == str(contract_path)
-    assert result["data"]["source_working_set"] == str(working_set_path)
-    assert result["data"]["goal"] == "重构 checkout 优惠券规则并验证风险"
-    assert result["data"]["constraints"] == ["先确认优惠规则"]
-    assert result["data"]["risks"] == ["金额错误"]
-    assert result["data"]["verification_focus"] == ["回归价格计算"]
-    written_contract = json.loads(contract_path.read_text(encoding="utf-8"))
-    assert written_contract["version"] == "2"
-    assert written_contract["goal"] == "重构 checkout 优惠券规则并验证风险"
-    assert "known_context" in result["data"]
-    assert "allowed_sources" in result["data"]
+    updated_doc = (docs / "pm" / "decisions.md").read_text(encoding="utf-8")
+    assert "## Checkout 上限校验" in updated_doc
+    assert "折扣计算后再校验封顶值" in updated_doc
 
 
 def test_search_first_flow_searches_then_builds_final_plan(tmp_path):
@@ -354,7 +330,7 @@ def test_more_specific_module_card_wins_in_real_flow(tmp_path):
     assert result["data"]["verification_focus"] == ["回归价格计算"]
 
 
-def test_save_flow_updates_docs_and_brief(tmp_path):
+def test_save_flow_updates_docs_without_brief_rebuild(tmp_path):
     result, code = run_cmd("lib.memory_init", ["--project-root", str(tmp_path)])
     assert code == 0
 
@@ -398,13 +374,12 @@ def test_save_flow_updates_docs_and_brief(tmp_path):
     result, code = run_cmd("lib.memory_save", ["--file", str(request_file), "--project-root", str(tmp_path)])
     assert code == 0
     assert result["code"] == "SUCCESS"
-    assert result["data"]["rebuild"]["brief"] is True
+    assert result["data"]["rebuild"] == {"brief": False, "catalog_repair": None}
 
     updated_doc = (docs / "pm" / "decisions.md").read_text(encoding="utf-8")
     assert "Checkout 优惠券规则" in updated_doc
 
-    brief = (tmp_path / ".memory" / "BRIEF.md").read_text(encoding="utf-8")
-    assert brief.startswith("# Project Brief")
+    assert not (tmp_path / ".memory" / "BRIEF.md").exists()
 
     topics_path = tmp_path / ".memory" / "catalog" / "topics.md"
     topics = topics_path.read_text(encoding="utf-8")

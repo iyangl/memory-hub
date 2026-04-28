@@ -1,4 +1,4 @@
-"""recall-plan — plan recall depth and sources for a task.
+"""recall-plan — deprecated legacy command.
 
 Usage: memory-hub recall-plan --task <task> [--project-root <path>] [--out <file>]
 """
@@ -12,7 +12,7 @@ from pathlib import Path
 
 from lib import envelope, paths
 from lib.memory_search import search_docs
-from lib.utils import atomic_write
+from lib.utils import atomic_write, fail_legacy_command
 
 TASK_KIND_PATTERNS = (
     ("decide", ("方案", "决策", "改进", "重构", "设计", "风险", "取舍")),
@@ -768,14 +768,11 @@ def plan_recall(task: str, project_root: Path | None = None) -> dict:
 
 
 def run(args: list[str]) -> None:
-    parser = argparse.ArgumentParser(prog="memory-hub recall-plan")
-    parser.add_argument("--task", required=True, help="Task description to plan recall for")
-    parser.add_argument("--project-root", help="Project root directory", default=None)
-    parser.add_argument("--out", help="Optional output file for planner JSON")
-    parsed = parser.parse_args(args)
-
-    project_root = Path(parsed.project_root) if parsed.project_root else None
-    result = plan_recall(parsed.task, project_root)
-    if parsed.out:
-        atomic_write(Path(parsed.out), json.dumps(result, ensure_ascii=False, indent=2) + "\n")
-    envelope.ok(result)
+    fail_legacy_command(
+        "recall-plan",
+        [
+            "memory-hub search <query>",
+            "memory-hub read <bucket> <file>",
+        ],
+        reason="Explicit-memory workflow no longer uses planner-based deep recall.",
+    )

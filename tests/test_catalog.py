@@ -54,111 +54,18 @@ class TestCatalogRead:
 
 
 class TestCatalogUpdate:
-    def test_creates_navigation_module_files(self, initialized_project):
+    def test_catalog_update_is_deprecated(self, initialized_project):
         modules_json = json.dumps({
-            "modules": [{
-                "name": "core",
-                "summary": "核心模块",
-                "read_when": "当任务涉及 CLI 或全局入口时阅读。",
-                "entry_points": ["lib/cli.py"],
-                "read_order": ["lib/cli.py", "lib/envelope.py"],
-                "implicit_constraints": ["先看入口再追踪分发"],
-                "known_risks": ["容易只看入口忽略下游模块"],
-                "verification_focus": ["确认命令分发与输出 envelope 保持稳定"],
-                "related_memory": ["docs/architect/decisions.md"],
-                "structure_hash": "abcd1234",
-                "files": [
-                    {"path": "lib/cli.py", "description": "CLI 入口"},
-                    {"path": "lib/envelope.py", "description": "JSON envelope"},
-                ]
-            }]
+            "modules": [{"name": "core", "files": []}]
         })
         json_file = initialized_project / "modules.json"
         json_file.write_text(modules_json, encoding="utf-8")
-        result, code = run_cmd("lib.catalog_update", ["--file", str(json_file), "--project-root", str(initialized_project)])
-        assert code == 0
-        module_file = initialized_project / ".memory" / "catalog" / "modules" / "core.md"
-        content = module_file.read_text(encoding="utf-8")
-        assert "## 何时阅读" in content
-        assert "## 推荐入口" in content
-        assert "## 推荐阅读顺序" in content
-        assert "## 隐含约束" in content
-        assert "## 主要风险" in content
-        assert "## 验证重点" in content
-        assert "## 关联记忆" in content
-        assert f"<!-- generator_version: {MODULE_CARD_GENERATOR_VERSION} -->" in content
-        assert "<!-- structure_hash: abcd1234 -->" in content
 
-    def test_topics_uses_navigation_entry_style(self, initialized_project):
-        modules_json = json.dumps({
-            "modules": [{
-                "name": "core",
-                "summary": "核心模块",
-                "read_when": "当任务涉及 CLI 或全局入口时阅读。",
-                "entry_points": ["lib/cli.py"],
-                "files": [{"path": "lib/cli.py", "description": "CLI 入口"}]
-            }]
-        })
-        json_file = initialized_project / "modules.json"
-        json_file.write_text(modules_json, encoding="utf-8")
-        run_cmd("lib.catalog_update", ["--file", str(json_file), "--project-root", str(initialized_project)])
-        topics = (initialized_project / ".memory" / "catalog" / "topics.md").read_text(encoding="utf-8")
-        assert "core" in topics
-        assert "入口:" in topics
-
-    def test_accepts_scan_modules_envelope_shape(self, initialized_project):
-        modules_json = json.dumps({
-            "ok": True,
-            "data": {
-                "modules": [{
-                    "name": "core",
-                    "summary": "核心模块",
-                    "read_when": "当任务涉及 CLI 时阅读。",
-                    "entry_points": ["lib/cli.py"],
-                    "files": [{"path": "lib/cli.py", "description": "CLI 入口"}]
-                }]
-            }
-        })
-        json_file = initialized_project / "scan-output.json"
-        json_file.write_text(modules_json, encoding="utf-8")
-        result, code = run_cmd("lib.catalog_update", ["--file", str(json_file), "--project-root", str(initialized_project)])
-        assert code == 0
-        assert "core" in result["data"]["modules_written"]
-
-    def test_rewrites_generator_version_to_current(self, initialized_project):
-        modules_json = json.dumps({
-            "modules": [{
-                "name": "core",
-                "summary": "核心模块",
-                "generator_version": "1",
-                "structure_hash": "abcd1234",
-                "entry_points": ["lib/cli.py"],
-                "files": [{"path": "lib/cli.py", "description": "CLI 入口"}]
-            }]
-        })
-        json_file = initialized_project / "modules.json"
-        json_file.write_text(modules_json, encoding="utf-8")
-        result, code = run_cmd("lib.catalog_update", ["--file", str(json_file), "--project-root", str(initialized_project)])
-        assert code == 0
-
-        module_file = initialized_project / ".memory" / "catalog" / "modules" / "core.md"
-        content = module_file.read_text(encoding="utf-8")
-        assert f"<!-- generator_version: {MODULE_CARD_GENERATOR_VERSION} -->" in content
-        assert "<!-- generator_version: 1 -->" not in content
-
-    def test_rejects_module_name_collisions(self, initialized_project):
-        modules_json = json.dumps({
-            "modules": [
-                {"name": "packages/web", "files": []},
-                {"name": "packages-web", "files": []},
-            ]
-        })
-        json_file = initialized_project / "modules.json"
-        json_file.write_text(modules_json, encoding="utf-8")
         result, code = run_cmd("lib.catalog_update", ["--file", str(json_file), "--project-root", str(initialized_project)])
         assert code == 1
-        assert result["code"] == "MODULE_NAME_COLLISION"
-        assert "packages-web" in result["details"]["collisions"]
+        assert result["code"] == "LEGACY_COMMAND_DEPRECATED"
+        assert result["details"]["command"] == "catalog-update"
+        assert result["details"]["replacement_commands"]
 
 
 class TestCatalogRepair:

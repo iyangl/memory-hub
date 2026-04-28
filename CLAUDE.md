@@ -4,23 +4,24 @@
 
 | Command | 触发 | 作用 |
 |---------|------|------|
-| `/memory-hub:init` | 首次接入项目，或 `.memory/` 尚不存在时 | 建立 recall-first 骨架，并按初始化流程生成基础 docs、catalog、`BRIEF.md` |
-| `/memory-hub:recall` | 会话开始时，或长会话中上下文变模糊时 | 读取 `BRIEF.md`，执行 `recall-plan`，按需进入 light/deep recall |
-| `/memory-hub:save` | 会话结束前 | 提炼 durable knowledge，生成 `save-request`，调用 `save` core 并重建派生产物 |
+| `/memory-hub:init` | 首次接入项目，或 `.memory/` 尚不存在时 | 创建显式记忆所需的最小骨架 |
+| `/memory-hub:recall` | 会话开始时，或长会话中上下文变模糊时 | 默认执行 `search -> read`，只加载与当前任务直接相关的 durable docs |
+| `/memory-hub:save` | 会话结束前 | 提炼 durable knowledge，生成 `save-request`，调用 `save` core 执行写入 |
 
 模板位于 `.claude/commands/memory-hub/`，按步骤执行即可。
 
-## Recall-first 规则
+## 显式记忆规则
 
-- `.memory/docs/` 是唯一正本；`BRIEF.md`、`catalog/`、`session/` 都是派生产物
-- recall 的核心是“先定位，再决定读什么”，不是把所有文档都读一遍
-- 对当前任务先做 `recall-plan`，再根据 `skip | light | deep` 选择读取范围
-- 若 `search_first = true`，必须先 search / catalog-read / read，再决定来源
-- deep recall 使用 `working-set` 组织任务级上下文；当前按 `resume-pack(v1)` 理解，working set 会做去重、压缩、限长，并显式给出 `primary_evidence_gap` 与 `verification_focus`
-- 在 `working-set(resume-pack)` 之后，可按需生成 `execution-contract` 作为 act 前边界
+- `.memory/docs/` 是唯一正本；默认 recall 只依赖 durable docs 本身
+- recall 的核心是“先 search，再决定读什么”，不是把所有文档都读一遍
+- 默认不读取 `BRIEF.md`
+- 默认不执行 `recall-plan` / `working-set` / `execution-contract`
+- `brief` / `catalog/` / module cards 只作为 legacy/兼容能力保留，不再是默认前置
+- Phase 2 之前，底层 core 若仍会生成部分 legacy 产物，也不应被默认 workflow 消费
 - 保存阶段默认走 `memory-hub save --file <save.json>` correctness core
 - 每条候选知识都要显式判定为 `noop | create | append | merge | update`
 - 非 `noop` 保存必须提供 search + read evidence，且 working set 不能原样落长期 docs
+- `create` 不强制要求 `index`；若提供 `index`，则继续维护 legacy `topics.md`
 - `noop` 是合法成功结果，不需要为了保存而保存
 
 ## Layer 2（最佳努力）
@@ -48,27 +49,25 @@
 
 ```text
 .memory/
-  BRIEF.md          <- base brief，/recall 的 boot summary
   manifest.json     <- 布局版本
   docs/             <- 唯一正本（所有长期知识都在这里）
     architect/      <- 架构决策、技术选型
     dev/            <- 开发约定、编码规范
     pm/             <- 产品决策、需求结论
     qa/             <- 测试策略、质量约定
-  catalog/          <- 派生索引（定位用）
+  catalog/          <- legacy 派生索引（兼容用）
     topics.md
     modules/
   inbox/            <- Layer 2 临时写入区
-  session/          <- recall-plan / working-set / execution-contract / save-request 等会话产物
+  session/          <- save-request / save-trace 等会话产物
 ```
 
 ## 硬边界
 
-- 不直接编辑 `.memory/docs/`（仅 `/memory-hub:init` 允许生成初始 docs；其余长期知识由 `/memory-hub:save` 和 `memory-hub save --file <save.json>` 负责）
-- 不直接编辑 `.memory/catalog/`（由 CLI 负责）
-- 不直接编辑 `.memory/BRIEF.md`（由 `brief` 生成）
+- 不直接编辑 `.memory/docs/`（仅 `/memory-hub:init` 创建基础文件；其余长期知识由 `/memory-hub:save` 和 `memory-hub save --file <save.json>` 负责）
+- 不直接编辑 `.memory/catalog/` 来伪造 legacy 索引
 - `working-set` 不能原样写回 docs
-- `save` core 会自动重建 `BRIEF.md` 与 `catalog-repair`，不要手工伪造结果
+- `BRIEF.md` / `catalog/` 不再是默认流程成功前提
 
 ## 维护
 

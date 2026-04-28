@@ -1,4 +1,4 @@
-"""catalog.update — Update code module index from AI-generated JSON.
+"""catalog.update — deprecated legacy command.
 
 Usage: memory-hub catalog-update --file <path> [--project-root <path>]
 """
@@ -11,7 +11,7 @@ from pathlib import Path
 
 from lib import envelope, paths
 from lib.scan_modules import MODULE_CARD_GENERATOR_VERSION
-from lib.utils import atomic_write, find_module_name_collisions, sanitize_module_name
+from lib.utils import atomic_write, fail_legacy_command, find_module_name_collisions, sanitize_module_name
 
 TOPICS_CODE_HEADER = "## 代码模块"
 TOPICS_KNOWLEDGE_HEADER = "## 知识文件"
@@ -137,86 +137,11 @@ def _validate_module(m: dict) -> tuple[str | None, str | None]:
 
 
 def run(args: list[str]) -> None:
-    parser = argparse.ArgumentParser(prog="memory-hub catalog-update")
-    parser.add_argument("--file", required=True, help="Path to JSON file with module definitions")
-    parser.add_argument("--project-root", help="Project root directory", default=None)
-    parsed = parser.parse_args(args)
-
-    project_root = Path(parsed.project_root) if parsed.project_root else None
-    json_path = Path(parsed.file)
-    if not json_path.exists():
-        envelope.fail("FILE_NOT_FOUND", f"JSON file not found: {parsed.file}")
-    try:
-        data = json.loads(json_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as e:
-        envelope.fail("INVALID_JSON", f"Failed to parse JSON file: {e}")
-
-    modules = data.get("modules")
-    if modules is None and isinstance(data.get("data"), dict):
-        modules = data["data"].get("modules")
-    if modules is None:
-        modules = []
-    if not isinstance(modules, list):
-        envelope.fail("INVALID_SCHEMA", "'modules' must be an array.")
-
-    collisions = find_module_name_collisions([
-        m.get("name", "") for m in modules
-        if isinstance(m, dict) and isinstance(m.get("name"), str)
-    ])
-    if collisions:
-        envelope.fail(
-            "MODULE_NAME_COLLISION",
-            "Multiple module names map to the same catalog filename.",
-            details={"collisions": collisions},
-        )
-
-    modules_dir = paths.modules_path(project_root)
-    modules_dir.mkdir(parents=True, exist_ok=True)
-
-    new_module_names = set()
-    skipped = []
-    valid_modules = []
-
-    for m in modules:
-        sanitized, error = _validate_module(m)
-        if error:
-            skipped.append({"name": m.get("name", ""), "reason": error})
-            continue
-        m_copy = dict(m)
-        m_copy["generator_version"] = MODULE_CARD_GENERATOR_VERSION
-        m_copy["_sanitized"] = sanitized
-        new_module_names.add(sanitized)
-        atomic_write(modules_dir / f"{sanitized}.md", _generate_module_md(m_copy))
-        valid_modules.append(m_copy)
-
-    deleted = []
-    for existing in modules_dir.iterdir():
-        if existing.suffix == ".md" and existing.stem not in new_module_names:
-            deleted.append(existing.name)
-            existing.unlink()
-
-    topics_file = paths.topics_path(project_root)
-    _update_topics_code_section(topics_file, valid_modules)
-
-    from lib.catalog_repair import repair
-    repair_result = repair(project_root)
-
-    ai_actions = list(repair_result.get("ai_actions", []))
-    for s in skipped:
-        ai_actions.append({
-            "type": "invalid_module_skipped",
-            "name": s["name"],
-            "reason": s["reason"],
-            "action": f"Module '{s['name']}' skipped: {s['reason']}. Fix and re-run.",
-        })
-
-    envelope.ok(
-        {
-            "modules_written": sorted(new_module_names),
-            "modules_deleted": deleted,
-            "modules_skipped": skipped,
-            "repair_result": repair_result,
-        },
-        ai_actions=ai_actions,
-        manual_actions=repair_result.get("manual_actions", []),
+    fail_legacy_command(
+        "catalog-update",
+        [
+            "memory-hub search <query>",
+            "memory-hub read <bucket> <file>",
+        ],
+        reason="Catalog/module-card update is legacy compatibility and no longer part of explicit-memory default workflow.",
     )

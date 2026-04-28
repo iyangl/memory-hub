@@ -26,14 +26,34 @@ COMMANDS = {
     "modules-check": "lib.modules_check",
 }
 
+CORE_COMMANDS = (
+    "init",
+    "read",
+    "list",
+    "search",
+    "save",
+    "inbox-list",
+    "inbox-clean",
+)
+
+LEGACY_COMMANDS = tuple(command for command in COMMANDS if command not in CORE_COMMANDS)
+
+
+def _command_help_text() -> str:
+    return (
+        "Usage: memory-hub <command> [args]\n"
+        f"Core commands: {', '.join(CORE_COMMANDS)}\n"
+        f"Legacy/compat commands: {', '.join(LEGACY_COMMANDS)}"
+    )
+
 
 def main() -> None:
     if len(sys.argv) < 2:
-        system_error(f"Usage: memory-hub <command> [args]\nCommands: {', '.join(COMMANDS)}")
+        system_error(_command_help_text())
 
     cmd = sys.argv[1]
     if cmd not in COMMANDS:
-        system_error(f"Unknown command: {cmd}\nAvailable: {', '.join(COMMANDS)}")
+        system_error(f"Unknown command: {cmd}\n{_command_help_text()}")
 
     import importlib
     module = importlib.import_module(COMMANDS[cmd])

@@ -1,7 +1,6 @@
-"""scan-modules — Discover code modules in a project.
+"""scan-modules — deprecated legacy command.
 
 Usage: memory-hub scan-modules [--project-root <path>]
-Outputs JSON with recall-first navigation fields.
 """
 
 from __future__ import annotations
@@ -14,7 +13,7 @@ import subprocess
 from pathlib import Path
 
 from lib import envelope
-from lib.utils import atomic_write
+from lib.utils import atomic_write, fail_legacy_command
 
 SKIP_DIRS = frozenset({
     ".git", ".svn", ".hg", ".memory",
@@ -510,17 +509,11 @@ def scan(project_root: Path | None = None, include_untracked: bool = False) -> d
 
 
 def run(args: list[str]) -> None:
-    parser = argparse.ArgumentParser(prog="memory-hub scan-modules")
-    parser.add_argument("--project-root", help="Project root directory", default=None)
-    parser.add_argument("--out", help="Optional output file for scan JSON")
-    parsed = parser.parse_args(args)
-
-    project_root = Path(parsed.project_root) if parsed.project_root else None
-    result = scan(project_root)
-    if parsed.out:
-        atomic_write(Path(parsed.out), json.dumps(result, ensure_ascii=False, indent=2) + "\n")
-        payload = dict(result)
-        payload["output_file"] = str(Path(parsed.out))
-        envelope.ok(payload)
-        return
-    envelope.ok(result)
+    fail_legacy_command(
+        "scan-modules",
+        [
+            "memory-hub search <query>",
+            "memory-hub read <bucket> <file>",
+        ],
+        reason="Module card generation is legacy compatibility and no longer part of default explicit-memory workflow.",
+    )

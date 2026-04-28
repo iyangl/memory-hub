@@ -4,41 +4,38 @@
 
 | Command | 触发方式 | 作用 |
 |---------|----------|------|
-| 初始化记忆 | 用户说“初始化记忆” / “init memory” | 建立 recall-first 骨架，并按初始化流程生成基础 docs、catalog、`BRIEF.md` |
-| 加载记忆 | 用户说“加载记忆” / “recall memory” | 读取 `BRIEF.md`，执行 `recall-plan`，按需进入 light/deep recall |
-| 保存记忆 | 用户说“保存记忆” / “save memory” | 提炼 durable knowledge，生成 `save-request`，调用 `save` core 并重建派生产物 |
+| 初始化记忆 | 用户说“初始化记忆” / “init memory” | 创建显式记忆所需的最小骨架 |
+| 加载记忆 | 用户说“加载记忆” / “recall memory” | 默认执行 `search -> read`，只加载与当前任务直接相关的 durable docs |
+| 保存记忆 | 用户说“保存记忆” / “save memory” | 提炼 durable knowledge，生成 `save-request`，调用 `save` core 执行写入 |
 
 Codex 没有 slash command，按 `.claude/commands/memory-hub/init.md`、`recall.md`、`save.md` 的模板步骤执行。
 
-## Recall-first 协议
+## 显式记忆协议
 
 ### 初始化记忆
 
-- 若 `.memory/` 不存在，先运行 `py -3 -m lib.cli init`
-- 读取实际项目文件，补齐高价值 docs（这是初始化阶段允许直接落入 `.memory/docs/` 的例外路径）
-- 运行 `scan-modules --out ...` 生成模块导航脚手架
-- 运行 `catalog-update` / `catalog-repair` / `brief`，产出导航卡和 base brief
+- 若 `.memory/` 不存在，先运行 `python3 -m lib.cli init`
+- 默认只把 `init` 当作最小骨架入口；Phase 2 之前，底层 core 若仍顺带生成 legacy 产物，也不作为后续前置
+- 不再在初始化阶段补齐高价值 docs 或扫描模块
 
 ### 加载记忆
 
-- 先确保 `.memory/`、`BRIEF.md`、catalog 已存在
-- 先读 `BRIEF.md` 作为 boot summary
-- 对当前任务执行 `py -3 -m lib.cli recall-plan --task "..." --out .memory/session/recall-plan.json`
-- 根据 planner 结果决定 `skip | light | deep`
-- 若 `search_first = true`，必须先 search / catalog-read / read，再决定来源
-- 若为 `deep`，执行 `py -3 -m lib.cli working-set --plan-file .memory/session/recall-plan.json --out .memory/session/working-set.json`
-- working set 当前按 `resume-pack(v1)` 理解：它是压缩、去重、限长后的任务上下文，保留来源、原因和 evidence gaps，并显式给出 `primary_evidence_gap` 与 `verification_focus`
-- 若需要把 act 前边界固定下来，再执行 `py -3 -m lib.cli execution-contract --working-set-file .memory/session/working-set.json --out .memory/session/execution-contract.json`
+- 默认主路径是 `search -> read`
+- 对当前任务先执行 `python3 -m lib.cli search "..."`
+- 只读取与当前任务直接相关的 durable docs：`python3 -m lib.cli read <bucket> <file>`
+- 可选用 `python3 -m lib.cli list <bucket>` 辅助定位
+- 无命中时，直接说明没有可复用显式记忆，并转入源码或当前任务上下文
+- `brief` / `catalog-read` / `recall-plan` / `working-set` / `execution-contract` 都只作为 legacy/兼容能力，不是默认路径
 
 ### 保存记忆
 
-- 候选来源包括 `.memory/inbox/`、当前会话结论、working set 中已确认的长期知识
+- 候选来源包括 `.memory/inbox/` 与当前会话中明确成立的长期结论
 - 先做后悔测试，不值得长期记忆的内容直接判定为 `noop`
 - 所有非 `noop` 写入都必须先 search，再 read 目标 doc
 - 每条候选必须显式归类为：`noop | create | append | merge | update`
 - 将保存决策整理为 `save-request.json`
-- 运行 `py -3 -m lib.cli save --file .memory/session/save-request.json`
-- `save` core 会强校验 evidence、阻止 working-set 原样写回，并在非 `noop` 后自动重建 `BRIEF.md` 与 `catalog-repair`
+- 运行 `python3 -m lib.cli save --file .memory/session/save-request.json`
+- `save` core 会强校验 evidence，并阻止 working-set 原样写回；legacy `topics.md` 仅在提供 `index` 时维护
 
 ## Layer 2（最佳努力）
 
@@ -52,28 +49,26 @@ Codex 没有 slash command，按 `.claude/commands/memory-hub/init.md`、`recall
 
 ```text
 .memory/
-  BRIEF.md          <- base brief（加载记忆时优先读取）
   manifest.json     <- 布局版本
   docs/             <- 唯一正本
     architect/
     dev/
     pm/
     qa/
-  catalog/          <- 派生索引（topics + module cards）
+  catalog/          <- legacy/兼容索引
     topics.md
     modules/
   inbox/            <- Layer 2 临时写入区
-  session/          <- recall-plan / working-set / execution-contract / save-request 等会话产物
+  session/          <- save-request / save-trace 等会话产物
 ```
 
 ## 硬边界
 
-- 不直接编辑 `.memory/docs/`（初始化记忆生成初始 docs 除外；其余长期知识由保存记忆流程和 `save` core 负责）
-- 不直接编辑 `.memory/catalog/`（由 CLI 负责）
-- 不直接编辑 `.memory/BRIEF.md`（由 `brief` 重建）
+- 不直接编辑 `.memory/docs/`（初始化记忆创建基础文件除外；其余长期知识由保存记忆流程和 `save` core 负责）
 - 不允许跳过 `Read Before Write`
 - 不允许把 `working-set` 原样写回长期 docs
 - `noop` 是合法成功结果
+- `BRIEF.md` / `catalog/` 不再是默认流程前置条件
 
 ## 维护
 

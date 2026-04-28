@@ -67,18 +67,8 @@ def run(args: list[str]) -> None:
     atomic_write(manifest_file, json.dumps(MANIFEST, ensure_ascii=False, indent=2) + "\n")
     created_files.append("manifest.json")
 
-    from lib.catalog_repair import repair
-    repair_result = repair(project_root)
-
-    from lib.brief import generate_brief
-    generate_brief(project_root)
-    created_files.append("BRIEF.md")
-
     envelope.ok(
         {
             "created_files": created_files,
-            "repair_result": repair_result,
         },
-        ai_actions=repair_result.get("ai_actions", []),
-        manual_actions=repair_result.get("manual_actions", []),
     )

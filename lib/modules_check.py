@@ -1,4 +1,4 @@
-"""modules-check — Detect stale, added, or removed module cards.
+"""modules-check — deprecated legacy command.
 
 Usage: memory-hub modules-check [--project-root <path>]
 """
@@ -11,7 +11,7 @@ from pathlib import Path
 
 from lib import envelope, paths
 from lib.scan_modules import MODULE_CARD_GENERATOR_VERSION, scan
-from lib.utils import find_module_name_collisions, sanitize_module_name
+from lib.utils import fail_legacy_command, find_module_name_collisions, sanitize_module_name
 
 _HASH_RE = re.compile(r"<!--\s*structure_hash:\s*(\w+)\s*-->")
 _VERSION_RE = re.compile(r"<!--\s*generator_version:\s*(\S+)\s*-->")
@@ -92,21 +92,11 @@ def check_modules(project_root: Path | None = None) -> dict:
 
 
 def run(args: list[str]) -> None:
-    parser = argparse.ArgumentParser(prog="memory-hub modules-check")
-    parser.add_argument("--project-root", help="Project root directory", default=None)
-    parsed = parser.parse_args(args)
-
-    project_root = Path(parsed.project_root) if parsed.project_root else None
-    result = check_modules(project_root)
-
-    ai_actions = []
-    if result["stale"] or result["added"] or result["removed"]:
-        ai_actions.append({
-            "type": "modules_outdated",
-            "action": "Module cards are outdated. Re-run scan-modules + catalog-update to refresh.",
-            "stale": result["stale"],
-            "added": result["added"],
-            "removed": result["removed"],
-        })
-
-    envelope.ok(result, ai_actions=ai_actions)
+    fail_legacy_command(
+        "modules-check",
+        [
+            "memory-hub search <query>",
+            "memory-hub read <bucket> <file>",
+        ],
+        reason="Module-card staleness checks are legacy compatibility and removed from default workflow.",
+    )

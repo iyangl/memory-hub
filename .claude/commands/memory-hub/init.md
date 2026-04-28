@@ -4,7 +4,7 @@ description: '首次扫描项目，生成初始记忆'
 
 # /memory-hub:init — 初始化项目记忆
 
-扫描项目并创建 recall-first 所需的初始记忆骨架与导航产物。
+创建显式记忆所需的最小骨架，不在初始化阶段生成派生产物或猜测高价值知识。
 
 ## 上下文
 
@@ -17,78 +17,38 @@ description: '首次扫描项目，生成初始记忆'
 
 ### Step 1：前置检查
 
-```bash
-ls .memory/manifest.json 2>/dev/null
-```
+如果 `.memory/manifest.json` 已存在，停止并返回 `ALREADY_INITIALIZED`。
 
-- 不存在 → 继续初始化
-- 已存在 → 停止并报告 `ALREADY_INITIALIZED`
-
-### Step 2：创建骨架
+### Step 2：创建最小骨架
 
 ```bash
-py -3 -m lib.cli init
+python3 -m lib.cli init
 ```
 
-此命令创建：
+默认工作流中，只把 `init` 视为“确保最小骨架存在”的入口。Phase 2 之前，底层 core 仍可能顺带产出 legacy 派生产物，但后续流程不应依赖它们。
+
+最小骨架至少包括：
 - `.memory/docs/`
 - `.memory/catalog/`
+- `.memory/catalog/modules/`
 - `.memory/inbox/`
 - `.memory/session/`
-- `.memory/BRIEF.md`
 - `.memory/manifest.json`
+- 各 bucket 的基础 doc 文件
 
-### Step 3：填充高价值 docs
-
-由你（LLM）读取项目实际文件后生成：
-- `architect/tech-stack.md`
-- `dev/conventions.md`
-- 必要时补充高价值决策 / 约束 / 验证策略
-
-说明：这是初始化阶段允许直接落入 `.memory/docs/` 的唯一场景；初始化后所有长期知识更新统一走 `/memory-hub:save`。
-
-目标不是做代码摘要，而是先沉淀：
-- 决策
-- 约束
-- 风险
-- 验证重点
-- 模块阅读导航所需背景
-
-### Step 4：生成模块导航脚手架
-
-先执行：
-
-```bash
-py -3 -m lib.cli scan-modules --out .memory/session/scan-modules.json
-```
-
-注意：该 CLI 的 stdout 是 envelope，而 `--out` 写出的文件是裸 `{"project_type": ..., "modules": [...]}`。后续供 `catalog-update` 使用时，优先直接传 `--out` 生成的文件；不要把 stdout 的 envelope 直接当作裸 `modules` JSON。
-
-### Step 5：写入模块导航卡
-
-Step 4 的 `--out` 文件可直接作为 `catalog-update` 输入。
-
-然后：
-
-```bash
-py -3 -m lib.cli catalog-update --file .memory/session/scan-modules.json
-```
-
-### Step 6：重建 base brief
-
-```bash
-py -3 -m lib.cli brief
-```
-
-BRIEF 的目标是 boot summary，不是 docs 首段拼盘。
-
-### Step 7：质量门
+### Step 3：结束初始化
 
 向用户报告：
-- 创建了哪些基础文件
-- 识别了哪些模块
-- 哪些入口/风险/验证重点已沉淀
-- 仍有哪些 unknowns
+- 已创建哪些基础文件
+- 默认流程不再要求消费 `BRIEF.md`
+- 默认流程不再要求依赖 `catalog-repair` 结果
+- 当前初始化不再扫描模块或补齐高价值 docs
+- 若现阶段 core 仍顺带生成 legacy 产物，可忽略，不作为后续前置
+
+如需开始使用，后续直接走：
+- `search`
+- `read`
+- `save`
 
 ---
 

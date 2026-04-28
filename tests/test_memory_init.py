@@ -37,7 +37,6 @@ class TestInit:
         assert (root / "catalog" / "modules").is_dir()
         assert (root / "inbox").is_dir()
         assert (root / "session").is_dir()
-        assert (root / "BRIEF.md").exists()
         assert (root / "manifest.json").exists()
 
     def test_topics_has_skeleton(self, tmp_path):
@@ -55,11 +54,7 @@ class TestInit:
         assert code == 1
         assert result["code"] == "ALREADY_INITIALIZED"
 
-    def test_repair_auto_triggered(self, tmp_path):
+    def test_init_only_creates_minimal_skeleton(self, tmp_path):
         result, _ = run_init(tmp_path)
-        assert "repair_result" in result["data"]
-
-    def test_brief_is_generated(self, tmp_path):
-        run_init(tmp_path)
-        brief = (tmp_path / ".memory" / "BRIEF.md").read_text(encoding="utf-8")
-        assert brief.startswith("# Project Brief")
+        assert "repair_result" not in result["data"]
+        assert not (tmp_path / ".memory" / "BRIEF.md").exists()

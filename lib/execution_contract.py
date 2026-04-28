@@ -1,4 +1,4 @@
-"""execution-contract — build an act-boundary contract from a working set.
+"""execution-contract — deprecated legacy command.
 
 Usage: memory-hub execution-contract --working-set-file <path> [--project-root <path>] [--out <file>]
 """
@@ -12,7 +12,7 @@ from pathlib import Path
 
 from lib import envelope, paths
 from lib.session_working_set import DURABLE_CANDIDATE_PLACEHOLDER, MAX_FACETS_PER_FIELD, WORKING_SET_VERSION
-from lib.utils import atomic_write, sanitize_module_name
+from lib.utils import atomic_write, fail_legacy_command, sanitize_module_name
 
 EXECUTION_CONTRACT_VERSION = "2"
 LEGACY_WORKING_SET_VERSION = "1"
@@ -235,30 +235,12 @@ def _default_output_path(working_set: dict, project_root: Path | None) -> Path:
 
 
 def run(args: list[str]) -> None:
-    parser = argparse.ArgumentParser(prog="memory-hub execution-contract")
-    parser.add_argument("--working-set-file", required=True, help="Path to working-set JSON file")
-    parser.add_argument("--project-root", help="Project root directory", default=None)
-    parser.add_argument("--out", help="Optional output file for execution-contract JSON")
-    parsed = parser.parse_args(args)
-
-    project_root = Path(parsed.project_root) if parsed.project_root else None
-    working_set_file = Path(parsed.working_set_file)
-
-    try:
-        working_set = json.loads(working_set_file.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        envelope.fail("FILE_NOT_FOUND", f"Working set file not found: {parsed.working_set_file}")
-    except json.JSONDecodeError as exc:
-        envelope.fail("INVALID_JSON", f"Failed to parse working set file: {exc}")
-
-    result = build_execution_contract(working_set, str(working_set_file))
-
-    if parsed.out:
-        out_path = Path(parsed.out)
-    else:
-        out_path = _default_output_path(result, project_root)
-    atomic_write(out_path, json.dumps(result, ensure_ascii=False, indent=2) + "\n")
-
-    payload = dict(result)
-    payload["output_file"] = str(out_path)
-    envelope.ok(payload)
+    fail_legacy_command(
+        "execution-contract",
+        [
+            "memory-hub search <query>",
+            "memory-hub read <bucket> <file>",
+            "memory-hub save --file <save.json>",
+        ],
+        reason="Explicit-memory workflow no longer requires execution-contract session artifacts.",
+    )

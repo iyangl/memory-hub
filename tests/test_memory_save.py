@@ -86,7 +86,7 @@ class TestSave:
         assert code == 0
         assert result["code"] == "NOOP"
         assert result["data"]["writes"] == []
-        assert result["data"]["rebuild"]["brief"] is False
+        assert result["data"]["rebuild"] == {"brief": False, "catalog_repair": None}
 
     def test_non_noop_requires_search_queries(self, initialized_project, tmp_path):
         request = {
@@ -162,7 +162,7 @@ class TestSave:
         assert code == 1
         assert result["code"] == "INVALID_DOCS_FILENAME"
 
-    def test_create_requires_index_and_writes_doc(self, initialized_project, tmp_path):
+    def test_create_with_index_writes_doc_and_updates_legacy_topics(self, initialized_project, tmp_path):
         request = {
             "version": "1",
             "task": "save new decision",
@@ -192,7 +192,38 @@ class TestSave:
         assert "本地文件缓存" in created.read_text(encoding="utf-8")
         topics = (initialized_project / ".memory" / "catalog" / "topics.md").read_text(encoding="utf-8")
         assert "docs/architect/caching.md" in topics
-        assert result["data"]["rebuild"]["brief"] is True
+        assert result["data"]["indexed"] == ["docs/architect/caching.md"]
+        assert result["data"]["rebuild"] == {"brief": False, "catalog_repair": None}
+
+    def test_create_without_index_writes_doc_and_skips_legacy_index(self, initialized_project, tmp_path):
+        request = {
+            "version": "1",
+            "entries": [
+                {
+                    "id": "create-1",
+                    "action": "create",
+                    "reason": "stable architecture decision",
+                    "target": {"bucket": "architect", "file": "caching-without-index.md"},
+                    "payload": {"doc_markdown": "## 决策\n\n- 使用本地文件缓存\n"},
+                    "evidence": {
+                        "search_queries": ["缓存 决策"],
+                        "read_refs": ["docs/architect/decisions.md"],
+                    },
+                }
+            ],
+        }
+        request_file = tmp_path / "save-create-without-index.json"
+        write_json(request_file, request)
+
+        result, code = run_cmd("lib.memory_save", ["--file", str(request_file), "--project-root", str(initialized_project)])
+        assert code == 0
+        assert result["code"] == "SUCCESS"
+        created = initialized_project / ".memory" / "docs" / "architect" / "caching-without-index.md"
+        assert created.exists()
+        assert "本地文件缓存" in created.read_text(encoding="utf-8")
+        topics = (initialized_project / ".memory" / "catalog" / "topics.md").read_text(encoding="utf-8")
+        assert "docs/architect/caching-without-index.md" not in topics
+        assert result["data"]["indexed"] == []
 
     def test_append_adds_section(self, initialized_project, tmp_path):
         request = {
@@ -683,7 +714,6 @@ class TestSave:
                     "reason": "stable architecture decision",
                     "target": {"bucket": "architect", "file": "raw-working-set.md"},
                     "payload": {"doc_markdown": excerpt},
-                    "index": {"topic": "working-set", "summary": "bad save"},
                     "evidence": {
                         "search_queries": ["Working set raw conclusion"],
                         "read_refs": ["docs/architect/decisions.md"],
@@ -705,7 +735,7 @@ class TestSave:
         assert code == 1
         assert result["code"] == "WORKING_SET_VERBATIM_FORBIDDEN"
 
-    def test_working_set_session_excerpt_cannot_be_written_verbatim_without_source_refs(self, initialized_project, tmp_path):
+    def test_working_set_session_excerpt_does_not_block_without_explicit_source_refs(self, initialized_project, tmp_path):
         excerpt = "Working set raw conclusion"
         write_working_set(initialized_project, excerpt=excerpt)
         request = {
@@ -717,7 +747,6 @@ class TestSave:
                     "reason": "stable architecture decision",
                     "target": {"bucket": "architect", "file": "raw-working-set.md"},
                     "payload": {"doc_markdown": f"## 决策\n\n- {excerpt}\n"},
-                    "index": {"topic": "working-set", "summary": "bad save"},
                     "evidence": {
                         "search_queries": [excerpt],
                         "read_refs": ["docs/architect/decisions.md"],
@@ -729,8 +758,10 @@ class TestSave:
         write_json(request_file, request)
 
         result, code = run_cmd("lib.memory_save", ["--file", str(request_file), "--project-root", str(initialized_project)])
-        assert code == 1
-        assert result["code"] == "WORKING_SET_VERBATIM_FORBIDDEN"
+        assert code == 0
+        assert result["code"] == "SUCCESS"
+        saved = (initialized_project / ".memory" / "docs" / "architect" / "raw-working-set.md").read_text(encoding="utf-8")
+        assert excerpt in saved
 
     def test_missing_session_json_source_ref_is_treated_as_working_set(self, initialized_project, tmp_path):
         excerpt = "## 决策\n\n- Working set raw conclusion\n"
@@ -743,7 +774,6 @@ class TestSave:
                     "reason": "stable architecture decision",
                     "target": {"bucket": "architect", "file": "raw-working-set-via-session-ref.md"},
                     "payload": {"doc_markdown": excerpt},
-                    "index": {"topic": "working-set", "summary": "bad save"},
                     "evidence": {
                         "search_queries": ["Working set raw conclusion"],
                         "read_refs": ["docs/architect/decisions.md"],
@@ -844,7 +874,6 @@ class TestSave:
                     "reason": "stable architecture decision",
                     "target": {"bucket": "architect", "file": "bad-source-refs.md"},
                     "payload": {"doc_markdown": "## 决策\n\n- 合法内容\n"},
-                    "index": {"topic": "working-set", "summary": "bad save"},
                     "evidence": {
                         "search_queries": ["合法内容"],
                         "read_refs": ["docs/architect/decisions.md"],

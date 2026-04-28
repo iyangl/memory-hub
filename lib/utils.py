@@ -60,3 +60,19 @@ def atomic_write(filepath: Path, content: str) -> None:
     if filepath.exists():
         filepath.unlink()
     tmp_path.rename(filepath)
+
+
+def fail_legacy_command(command: str, replacement_commands: list[str], *, reason: str) -> None:
+    """Emit a standard deprecation envelope for legacy commands."""
+    from lib import envelope
+
+    replacements = [item.strip() for item in replacement_commands if isinstance(item, str) and item.strip()]
+    envelope.fail(
+        "LEGACY_COMMAND_DEPRECATED",
+        f"Command '{command}' is deprecated and no longer part of the default workflow.",
+        details={
+            "command": command,
+            "reason": reason,
+            "replacement_commands": replacements,
+        },
+    )
